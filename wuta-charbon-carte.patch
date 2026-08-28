@@ -1,0 +1,431 @@
+diff --git a/README.md b/README.md
+index bf4b81d..9650490 100644
+--- a/README.md
++++ b/README.md
+@@ -158,6 +158,23 @@ Pour mettre vos propres photos :
+ La photo remplace alors automatiquement l'illustration par défaut, sur la
+ boutique comme dans le tableau de bord admin.
+ 
++## Localisation des commandes (carte)
++
++Aucune clé API n'est nécessaire : les cartes utilisent **OpenStreetMap**
++(gratuit, open source) via la librairie Leaflet.
++
++- Au moment de commander, le client peut placer un repère sur une petite
++  carte (clic, ou bouton "Utiliser ma position" qui demande la
++  géolocalisation du navigateur). C'est facultatif — la commande fonctionne
++  très bien avec juste l'adresse texte si le client ne veut pas partager sa
++  position.
++- Dans l'espace admin, l'onglet **Carte** affiche toutes les commandes
++  localisées sur une carte de Niamey, avec un repère coloré selon le statut.
++  En cliquant sur un repère, un lien ouvre directement l'itinéraire dans
++  Google Maps — pratique pour un livreur qui a l'appli sur son téléphone.
++- Dans l'onglet **Commandes**, un lien "Itinéraire" apparaît sous l'adresse
++  dès qu'une position est disponible.
++
+ ## Sécurité — points à connaître
+ 
+ - Les mots de passe admin sont hachés avec bcrypt, jamais stockés en clair
+diff --git a/app/api/orders/route.js b/app/api/orders/route.js
+index 7deb270..9b503f6 100644
+--- a/app/api/orders/route.js
++++ b/app/api/orders/route.js
+@@ -15,17 +15,21 @@ export async function GET() {
+ 
+ export async function POST(request) {
+   const body = await request.json();
+-  const { customerName, customerPhone, customerAddress, note, items } = body;
++  const { customerName, customerPhone, customerAddress, note, items, latitude, longitude } = body;
+ 
+   if (!customerName || !customerPhone || !customerAddress || !Array.isArray(items) || items.length === 0) {
+     return NextResponse.json({ error: "Informations de livraison ou panier incomplets." }, { status: 400 });
+   }
+ 
++  const hasCoords =
++    typeof latitude === "number" && typeof longitude === "number" &&
++    !Number.isNaN(latitude) && !Number.isNaN(longitude);
++
+   const getProduct = db.prepare("SELECT * FROM products WHERE id = ?");
+   const updateStock = db.prepare("UPDATE products SET stock = ?, updatedAt = datetime('now') WHERE id = ?");
+   const insertOrder = db.prepare(`
+-    INSERT INTO orders (id, reference, customerName, customerPhone, customerAddress, note, total, status)
+-    VALUES (@id, @reference, @customerName, @customerPhone, @customerAddress, @note, @total, 'En attente')
++    INSERT INTO orders (id, reference, customerName, customerPhone, customerAddress, note, latitude, longitude, total, status)
++    VALUES (@id, @reference, @customerName, @customerPhone, @customerAddress, @note, @latitude, @longitude, @total, 'En attente')
+   `);
+   const insertItem = db.prepare(`
+     INSERT INTO order_items (id, orderId, productId, name, qty, price)
+@@ -58,6 +62,8 @@ export async function POST(request) {
+         customerPhone,
+         customerAddress,
+         note: note || "",
++        latitude: hasCoords ? latitude : null,
++        longitude: hasCoords ? longitude : null,
+         total,
+       });
+       for (const it of resolvedItems) {
+diff --git a/components/Admin.js b/components/Admin.js
+index 6e63660..63ed994 100644
+--- a/components/Admin.js
++++ b/components/Admin.js
+@@ -1,13 +1,17 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
++import dynamic from "next/dynamic";
+ import {
+-  Lock, LogOut, Plus, Minus, Edit2, Trash2, AlertTriangle, ArrowLeft, X,
++  Lock, LogOut, Plus, Minus, Edit2, Trash2, AlertTriangle, ArrowLeft, X, MapPin,
+ } from "lucide-react";
+ import { Badge, formatFCFA, CATEGORY_COLORS } from "./ui";
+ import StatsPanel from "./StatsPanel";
+ import TeamPanel from "./TeamPanel";
+ 
++// Leaflet a besoin de `window` : on ne le charge jamais côté serveur.
++const OrdersMap = dynamic(() => import("./OrdersMap"), { ssr: false });
++
+ const CATEGORIES = ["Ménage", "Grillade", "Industriel", "Écologique"];
+ 
+ export default function Admin() {
+@@ -209,6 +213,12 @@ export default function Admin() {
+           >
+             Commandes ({orders.length})
+           </button>
++          <button
++            onClick={() => setTab("map")}
++            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "map" ? "bg-void text-paper" : "bg-paperdeep text-sack"}`}
++          >
++            Carte
++          </button>
+           <button
+             onClick={() => setTab("stats")}
+             className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "stats" ? "bg-void text-paper" : "bg-paperdeep text-sack"}`}
+@@ -316,6 +326,16 @@ export default function Admin() {
+                           {new Date(o.createdAt).toLocaleString("fr-FR")} · {o.customerName} · {o.customerPhone}
+                         </p>
+                         <p className="text-xs text-ash">{o.customerAddress}</p>
++                        {o.latitude != null && o.longitude != null && (
++                          <a
++                            href={`https://www.google.com/maps/dir/?api=1&destination=${o.latitude},${o.longitude}`}
++                            target="_blank"
++                            rel="noreferrer"
++                            className="text-xs text-emberdeep font-medium flex items-center gap-1 mt-1"
++                          >
++                            <MapPin size={12} /> Itinéraire
++                          </a>
++                        )}
+                       </div>
+                       <div className="flex items-center gap-3">
+                         <span className="font-display text-lg">{formatFCFA(o.total)}</span>
+@@ -344,6 +364,13 @@ export default function Admin() {
+           </div>
+         )}
+ 
++        {tab === "map" && (
++          <div>
++            <h3 className="font-display text-2xl mb-4">Carte des livraisons</h3>
++            <OrdersMap orders={orders} />
++          </div>
++        )}
++
+         {tab === "stats" && <StatsPanel />}
+ 
+         {tab === "team" && role === "super_admin" && <TeamPanel currentEmail={sessionEmail} />}
+diff --git a/components/LocationPicker.js b/components/LocationPicker.js
+new file mode 100644
+index 0000000..7fb9340
+--- /dev/null
++++ b/components/LocationPicker.js
+@@ -0,0 +1,81 @@
++"use client";
++
++import { useState } from "react";
++import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from "react-leaflet";
++import { LocateFixed } from "lucide-react";
++import "leaflet/dist/leaflet.css";
++import { emberIcon, NIAMEY_CENTER } from "./mapUtils";
++
++function ClickToPlace({ onChange }) {
++  useMapEvents({
++    click(e) {
++      onChange(e.latlng.lat, e.latlng.lng);
++    },
++  });
++  return null;
++}
++
++function FlyTo({ position }) {
++  const map = useMap();
++  if (position) map.flyTo(position, 16, { duration: 0.8 });
++  return null;
++}
++
++export default function LocationPicker({ latitude, longitude, onChange }) {
++  const [locating, setLocating] = useState(false);
++  const [error, setError] = useState("");
++  const position = latitude != null && longitude != null ? [latitude, longitude] : null;
++
++  function useMyLocation() {
++    if (!navigator.geolocation) {
++      setError("La géolocalisation n'est pas disponible sur cet appareil.");
++      return;
++    }
++    setLocating(true);
++    setError("");
++    navigator.geolocation.getCurrentPosition(
++      (pos) => {
++        onChange(pos.coords.latitude, pos.coords.longitude);
++        setLocating(false);
++      },
++      () => {
++        setError("Position refusée ou indisponible. Placez le repère manuellement sur la carte.");
++        setLocating(false);
++      },
++      { enableHighAccuracy: true, timeout: 8000 }
++    );
++  }
++
++  return (
++    <div>
++      <div className="flex items-center justify-between mb-1">
++        <label className="text-xs font-semibold text-ash">
++          Position de livraison <span className="font-normal">(facultatif, aide beaucoup le livreur)</span>
++        </label>
++        <button
++          type="button"
++          onClick={useMyLocation}
++          disabled={locating}
++          className="flex items-center gap-1 text-xs font-semibold text-emberdeep disabled:opacity-50"
++        >
++          <LocateFixed size={14} /> {locating ? "Localisation…" : "Utiliser ma position"}
++        </button>
++      </div>
++      <div className="rounded-lg overflow-hidden border border-paperdeep" style={{ height: 200 }}>
++        <MapContainer center={position || NIAMEY_CENTER} zoom={position ? 16 : 12} style={{ height: "100%", width: "100%" }}>
++          <TileLayer
++            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
++            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
++          />
++          <ClickToPlace onChange={onChange} />
++          {position && <FlyTo position={position} />}
++          {position && <Marker position={position} icon={emberIcon()} />}
++        </MapContainer>
++      </div>
++      <p className="text-xs text-ash mt-1">
++        {position ? "Repère placé — cliquez ailleurs sur la carte pour le déplacer." : "Cliquez sur la carte à l'endroit de la livraison."}
++      </p>
++      {error && <p className="text-xs text-emberdeep mt-1">{error}</p>}
++    </div>
++  );
++}
+diff --git a/components/OrdersMap.js b/components/OrdersMap.js
+new file mode 100644
+index 0000000..a0c3411
+--- /dev/null
++++ b/components/OrdersMap.js
+@@ -0,0 +1,61 @@
++"use client";
++
++import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
++import { ExternalLink } from "lucide-react";
++import "leaflet/dist/leaflet.css";
++import { emberIcon } from "./mapUtils";
++import { formatFCFA } from "./ui";
++
++const STATUS_COLOR = {
++  "En attente": "#FF6B35",
++  "Livrée": "#5B7A4A",
++  "Annulée": "#8C8177",
++};
++
++export default function OrdersMap({ orders }) {
++  const located = orders.filter((o) => o.latitude != null && o.longitude != null);
++
++  if (located.length === 0) {
++    return (
++      <div className="rounded-xl p-8 text-center bg-white border border-paperdeep">
++        <p className="text-sm text-ash">
++          Aucune commande localisée pour le moment. Les clients qui placent un repère lors de leur commande
++          apparaîtront ici.
++        </p>
++      </div>
++    );
++  }
++
++  const center = [located[0].latitude, located[0].longitude];
++
++  return (
++    <div className="rounded-xl overflow-hidden border border-paperdeep" style={{ height: 480 }}>
++      <MapContainer center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
++        <TileLayer
++          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
++          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
++        />
++        {located.map((o) => (
++          <Marker key={o.id} position={[o.latitude, o.longitude]} icon={emberIcon(STATUS_COLOR[o.status] || "#FF6B35")}>
++            <Popup>
++              <div className="text-sm">
++                <p className="font-semibold font-mono">{o.reference}</p>
++                <p>{o.customerName} · {o.customerPhone}</p>
++                <p className="text-xs text-ash">{o.customerAddress}</p>
++                <p className="mt-1 font-semibold">{formatFCFA(o.total)} — {o.status}</p>
++                <a
++                  href={`https://www.google.com/maps/dir/?api=1&destination=${o.latitude},${o.longitude}`}
++                  target="_blank"
++                  rel="noreferrer"
++                  className="flex items-center gap-1 mt-2 text-emberdeep font-medium"
++                >
++                  <ExternalLink size={12} /> Itinéraire dans Google Maps
++                </a>
++              </div>
++            </Popup>
++          </Marker>
++        ))}
++      </MapContainer>
++    </div>
++  );
++}
+diff --git a/components/Shop.js b/components/Shop.js
+index b5742ec..c89bb3d 100644
+--- a/components/Shop.js
++++ b/components/Shop.js
+@@ -1,6 +1,7 @@
+ "use client";
+ 
+ import { useEffect, useMemo, useState } from "react";
++import dynamic from "next/dynamic";
+ import {
+   ShoppingCart, Plus, Minus, X, Check, Flame, Truck, Phone, MapPin,
+   Package, Leaf, Menu, Lock,
+@@ -8,6 +9,9 @@ import {
+ import { Badge, StockGauge, formatFCFA, CATEGORY_COLORS } from "./ui";
+ import { SackIllustration, HeroIllustration } from "./illustrations";
+ 
++// Leaflet a besoin de `window` : on ne le charge jamais côté serveur.
++const LocationPicker = dynamic(() => import("./LocationPicker"), { ssr: false });
++
+ const ICONS = { sack: Package, flame: Flame, truck: Truck, leaf: Leaf };
+ const CATEGORIES = ["Tous", "Ménage", "Grillade", "Industriel", "Écologique"];
+ const CART_KEY = "wuta_cart_v1";
+@@ -96,6 +100,8 @@ export default function Shop({ contactPhone, contactCity }) {
+         customerPhone: customer.phone,
+         customerAddress: customer.address,
+         note: customer.note,
++        latitude: customer.latitude,
++        longitude: customer.longitude,
+         items: cartItems.map((i) => ({ productId: i.id, qty: i.qty })),
+       }),
+     });
+@@ -405,6 +411,8 @@ function CheckoutModal({ total, onClose, onSubmit }) {
+   const [phone, setPhone] = useState("");
+   const [address, setAddress] = useState("");
+   const [note, setNote] = useState("");
++  const [latitude, setLatitude] = useState(null);
++  const [longitude, setLongitude] = useState(null);
+   const [error, setError] = useState("");
+   const [submitting, setSubmitting] = useState(false);
+ 
+@@ -416,7 +424,7 @@ function CheckoutModal({ total, onClose, onSubmit }) {
+     setError("");
+     setSubmitting(true);
+     try {
+-      await onSubmit({ name, phone, address, note });
++      await onSubmit({ name, phone, address, note, latitude, longitude });
+     } catch (e) {
+       setError(e.message);
+     } finally {
+@@ -427,7 +435,7 @@ function CheckoutModal({ total, onClose, onSubmit }) {
+   return (
+     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+-      <div className="relative max-w-md w-full rounded-2xl p-6 bg-white">
++      <div className="relative max-w-md w-full rounded-2xl p-6 bg-white max-h-[92vh] overflow-y-auto">
+         <div className="flex items-center justify-between mb-4">
+           <h3 className="font-display text-xl">Finaliser la commande</h3>
+           <button onClick={onClose}><X size={20} /></button>
+@@ -436,6 +444,11 @@ function CheckoutModal({ total, onClose, onSubmit }) {
+           <Field label="Nom complet" value={name} onChange={setName} placeholder="Ex : Aïcha Moussa" />
+           <Field label="Téléphone" value={phone} onChange={setPhone} placeholder="Ex : 90 00 00 00" />
+           <Field label="Quartier / adresse" value={address} onChange={setAddress} placeholder="Ex : Plateau, rue NB-12" />
++          <LocationPicker
++            latitude={latitude}
++            longitude={longitude}
++            onChange={(lat, lng) => { setLatitude(lat); setLongitude(lng); }}
++          />
+           <Field label="Note (facultatif)" value={note} onChange={setNote} placeholder="Repère, horaire préféré…" />
+           {error && <p className="text-xs text-emberdeep">{error}</p>}
+         </div>
+diff --git a/components/mapUtils.js b/components/mapUtils.js
+new file mode 100644
+index 0000000..ae2cbfb
+--- /dev/null
++++ b/components/mapUtils.js
+@@ -0,0 +1,25 @@
++"use client";
++
++import L from "leaflet";
++
++// Correctif classique de react-leaflet/webpack : on dessine notre propre pin
++// (aux couleurs de la marque) plutôt que de dépendre des images par défaut
++// de Leaflet, dont le chemin casse souvent après le bundling.
++export function emberIcon(color = "#FF6B35") {
++  return L.divIcon({
++    className: "",
++    html: `
++      <svg width="30" height="42" viewBox="0 0 30 42" xmlns="http://www.w3.org/2000/svg">
++        <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 27 15 27s15-16.5 15-27C30 6.7 23.3 0 15 0Z" fill="${color}"/>
++        <circle cx="15" cy="15" r="6" fill="#1B1512"/>
++      </svg>
++    `,
++    iconSize: [30, 42],
++    iconAnchor: [15, 42],
++    popupAnchor: [0, -38],
++  });
++}
++
++// Coordonnées par défaut : centre de Niamey, utilisé quand aucune
++// géolocalisation n'est encore disponible.
++export const NIAMEY_CENTER = [13.5137, 2.1098];
+diff --git a/lib/db.js b/lib/db.js
+index d394e42..0be9575 100644
+--- a/lib/db.js
++++ b/lib/db.js
+@@ -49,6 +49,8 @@ db.exec(`
+     customerPhone TEXT NOT NULL,
+     customerAddress TEXT NOT NULL,
+     note TEXT DEFAULT '',
++    latitude REAL,
++    longitude REAL,
+     total INTEGER NOT NULL,
+     status TEXT NOT NULL DEFAULT 'En attente',
+     createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+@@ -74,5 +76,12 @@ const productColumns = db.prepare("PRAGMA table_info(products)").all().map((c) =
+ if (!productColumns.includes("imageUrl")) {
+   db.exec("ALTER TABLE products ADD COLUMN imageUrl TEXT DEFAULT ''");
+ }
++const orderColumns = db.prepare("PRAGMA table_info(orders)").all().map((c) => c.name);
++if (!orderColumns.includes("latitude")) {
++  db.exec("ALTER TABLE orders ADD COLUMN latitude REAL");
++}
++if (!orderColumns.includes("longitude")) {
++  db.exec("ALTER TABLE orders ADD COLUMN longitude REAL");
++}
+ 
+ module.exports = db;
+diff --git a/package.json b/package.json
+index a3b6457..860f9f5 100644
+--- a/package.json
++++ b/package.json
+@@ -14,10 +14,12 @@
+     "better-sqlite3": "^11.3.0",
+     "dotenv": "^17.4.2",
+     "jsonwebtoken": "^9.0.2",
++    "leaflet": "^1.9.4",
+     "lucide-react": "^0.383.0",
+     "next": "^14.2.35",
+     "react": "^18.3.1",
+     "react-dom": "^18.3.1",
++    "react-leaflet": "^4.2.1",
+     "recharts": "^3.10.1"
+   },
+   "devDependencies": {
