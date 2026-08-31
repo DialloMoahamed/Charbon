@@ -3,16 +3,33 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  Lock, LogOut, Plus, Minus, Edit2, Trash2, AlertTriangle, ArrowLeft, X, MapPin,
+  Lock, LogOut, Plus, Minus, Edit2, Trash2, ArrowLeft, X, MapPin,
+  Flame, LayoutDashboard, ClipboardList, Boxes, MapPinned, BarChart3, Users2, Users,
+  MessageCircle, Archive, Settings as SettingsIcon,
 } from "lucide-react";
-import { Badge, formatFCFA, CATEGORY_COLORS } from "./ui";
+import { Badge, formatFCFA, CATEGORY_COLORS, StockGauge } from "./ui";
 import StatsPanel from "./StatsPanel";
 import TeamPanel from "./TeamPanel";
+import DashboardPanel from "./DashboardPanel";
+import MessagingPanel from "./MessagingPanel";
+import ClientsPanel from "./ClientsPanel";
+import SettingsPanel from "./SettingsPanel";
 
 // Leaflet a besoin de `window` : on ne le charge jamais côté serveur.
 const OrdersMap = dynamic(() => import("./OrdersMap"), { ssr: false });
 
 const CATEGORIES = ["Ménage", "Grillade", "Industriel", "Écologique"];
+
+const NAV_ITEMS = [
+  { id: "dashboard", label: "Tableau de bord", Icon: LayoutDashboard },
+  { id: "orders", label: "Commandes", Icon: ClipboardList },
+  { id: "messages", label: "Messagerie", Icon: MessageCircle },
+  { id: "products", label: "Produits", Icon: Boxes },
+  { id: "inventory", label: "Stock", Icon: Archive },
+  { id: "stats", label: "Statistiques", Icon: BarChart3 },
+  { id: "map", label: "Carte de livraison", Icon: MapPinned },
+  { id: "clients", label: "Clients", Icon: Users },
+];
 
 export default function Admin() {
   const [checkingSession, setCheckingSession] = useState(true);
@@ -26,10 +43,12 @@ export default function Admin() {
 
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [tab, setTab] = useState("stock");
+  const [tab, setTab] = useState("dashboard");
   const [editingProduct, setEditingProduct] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [pendingConversationId, setPendingConversationId] = useState(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -44,6 +63,22 @@ export default function Admin() {
       })
       .finally(() => setCheckingSession(false));
   }, []);
+
+  // Badge de messages non lus dans la sidebar, indépendant de l'onglet actif.
+  useEffect(() => {
+    if (!authed) return;
+    let cancelled = false;
+    function poll() {
+      fetch("/api/conversations")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((list) => {
+          if (!cancelled) setUnreadMessages(list.reduce((s, c) => s + (c.unreadForAdmin || 0), 0));
+        });
+    }
+    poll();
+    const interval = setInterval(poll, 15000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [authed]);
 
   function loadData() {
     fetch("/api/products").then((r) => r.json()).then(setProducts);
@@ -158,7 +193,7 @@ export default function Admin() {
             <button
               onClick={handleLogin}
               disabled={loggingIn}
-              className="w-full mt-4 py-3 rounded-lg font-semibold text-sm bg-ember text-void disabled:opacity-60"
+              className="w-full mt-4 py-3 rounded-lg font-semibold text-sm bg-ember text-white disabled:opacity-60"
             >
               {loggingIn ? "Connexion…" : "Se connecter"}
             </button>
@@ -172,80 +207,106 @@ export default function Admin() {
     );
   }
 
-  const lowStock = products.filter((p) => p.stock > 0 && p.stock / p.capacity < 0.2);
-  const outOfStock = products.filter((p) => p.stock === 0);
+  const navItems = NAV_ITEMS
+    .concat(role === "super_admin" ? [{ id: "team", label: "Équipe", Icon: Users2 }] : [])
+    .concat([{ id: "settings", label: "Paramètres", Icon: SettingsIcon }]);
+  const tabTitles = Object.fromEntries(navItems.map((n) => [n.id, n.label]));
 
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="flex items-center justify-between px-6 py-4 md:px-10 bg-void">
-        <div className="flex items-center gap-3">
-          <a href="/" className="flex items-center gap-2 text-sm text-ashlight">
-            <ArrowLeft size={16} /> Boutique
-          </a>
-          <span className="font-display text-lg text-paper">Espace pro — WUTA</span>
-        </div>
-        <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-ashlight">
-          <LogOut size={16} /> Déconnexion
-        </button>
-      </header>
-
-      <div className="px-6 py-8 md:px-10">
-        {(lowStock.length > 0 || outOfStock.length > 0) && (
-          <div className="rounded-xl p-4 mb-8 flex items-start gap-3 bg-emberdeep/10 border border-emberdeep/40">
-            <AlertTriangle size={20} className="shrink-0 mt-0.5 text-emberdeep" />
-            <p className="text-sm text-emberdeep">
-              {outOfStock.length > 0 && <>{outOfStock.length} produit(s) en rupture. </>}
-              {lowStock.length > 0 && <>{lowStock.length} produit(s) en stock limité.</>}
-            </p>
+    <div className="min-h-screen flex bg-paper">
+      {/* Sidebar */}
+      <aside className="hidden md:flex md:flex-col w-64 shrink-0 bg-void">
+        <div className="px-6 py-5 flex items-center gap-2 border-b border-voidline">
+          <Flame size={20} className="text-ember" />
+          <div>
+            <p className="font-display text-lg text-paper leading-tight">WUTA</p>
+            <p className="text-[10px] uppercase tracking-wider text-ash leading-tight">Admin</p>
           </div>
-        )}
-
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setTab("stock")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "stock" ? "bg-void text-paper" : "bg-paperdeep text-sack"}`}
-          >
-            Stock &amp; produits
-          </button>
-          <button
-            onClick={() => setTab("orders")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "orders" ? "bg-void text-paper" : "bg-paperdeep text-sack"}`}
-          >
-            Commandes ({orders.length})
-          </button>
-          <button
-            onClick={() => setTab("map")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "map" ? "bg-void text-paper" : "bg-paperdeep text-sack"}`}
-          >
-            Carte
-          </button>
-          <button
-            onClick={() => setTab("stats")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "stats" ? "bg-void text-paper" : "bg-paperdeep text-sack"}`}
-          >
-            Statistiques
-          </button>
-          {role === "super_admin" && (
+        </div>
+        <nav className="flex-1 px-3 py-4 space-y-1">
+          {navItems.map(({ id, label, Icon }) => (
             <button
-              onClick={() => setTab("team")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "team" ? "bg-void text-paper" : "bg-paperdeep text-sack"}`}
+              key={id}
+              onClick={() => setTab(id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
+                tab === id ? "bg-ember text-white" : "text-ashlight hover:bg-voidsoft"
+              }`}
             >
-              Équipe
+              <Icon size={17} /> {label}
+              {id === "messages" && unreadMessages > 0 && (
+                <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-ember text-white text-[10px] font-bold flex items-center justify-center">
+                  {unreadMessages}
+                </span>
+              )}
             </button>
-          )}
+          ))}
+        </nav>
+        <div className="px-3 py-4 border-t border-voidline space-y-1">
+          <a href="/" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ashlight hover:bg-voidsoft">
+            <ArrowLeft size={17} /> Boutique
+          </a>
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ashlight hover:bg-voidsoft">
+            <LogOut size={17} /> Déconnexion
+          </button>
+        </div>
+      </aside>
+
+      <div className="flex-1 min-w-0">
+        {/* Topbar */}
+        <header className="flex items-center justify-between px-6 py-4 md:px-10 bg-white border-b border-paperdeep">
+          <div className="flex items-center gap-3 md:hidden">
+            <Flame size={18} className="text-ember" />
+            <span className="font-display text-base text-void">WUTA Admin</span>
+          </div>
+          <h2 className="hidden md:block font-display text-xl text-void">{tabTitles[tab]}</h2>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="hidden sm:inline text-sack">{sessionEmail}</span>
+            <span className="hidden sm:inline px-2 py-0.5 rounded-full text-xs font-medium bg-paperdeep text-sack">
+              {role === "super_admin" ? "Super admin" : "Gestionnaire"}
+            </span>
+          </div>
+        </header>
+
+        {/* Navigation mobile */}
+        <div className="md:hidden flex gap-2 px-6 py-3 overflow-x-auto bg-white border-b border-paperdeep">
+          {navItems.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`shrink-0 px-3 py-2 rounded-lg text-sm font-medium ${
+                tab === id ? "bg-void text-white" : "bg-paperdeep text-sack"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        {tab === "stock" && (
+        <div className="px-6 py-8 md:px-10">
+          {tab === "dashboard" && <DashboardPanel products={products} orders={orders} />}
+
+          {tab === "messages" && (
+            <MessagingPanel
+              initialConversationId={pendingConversationId}
+              onConsumeInitial={() => setPendingConversationId(null)}
+            />
+          )}
+
+          {tab === "products" && (
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-display text-2xl">Produits</h3>
               <button
                 onClick={() => { setEditingProduct(null); setShowForm(true); }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-ember text-void"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-ember text-white"
               >
                 <Plus size={16} /> Ajouter un produit
               </button>
             </div>
+            <p className="text-sm text-ash mb-4">
+              Fiche, prix et description de chaque produit. Pour ajuster les quantités en stock, direction l'onglet{" "}
+              <button onClick={() => setTab("inventory")} className="font-semibold text-ember">Stock</button>.
+            </p>
             <div className="overflow-x-auto rounded-xl border border-paperdeep">
               <table className="w-full text-sm bg-white">
                 <thead>
@@ -275,15 +336,7 @@ export default function Admin() {
                       <td className="px-4 py-3"><Badge className={CATEGORY_COLORS[p.category]}>{p.category}</Badge></td>
                       <td className="px-4 py-3 font-mono">{formatFCFA(p.price)}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => adjustStock(p.id, -1)} className="w-6 h-6 flex items-center justify-center rounded-full bg-paperdeep">
-                            <Minus size={12} />
-                          </button>
-                          <span className={`font-mono w-8 text-center ${p.stock === 0 ? "text-emberdeep" : ""}`}>{p.stock}</span>
-                          <button onClick={() => adjustStock(p.id, 1)} className="w-6 h-6 flex items-center justify-center rounded-full bg-paperdeep">
-                            <Plus size={12} />
-                          </button>
-                        </div>
+                        <span className={`font-mono ${p.stock === 0 ? "text-emberdeep" : ""}`}>{p.stock}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -309,6 +362,16 @@ export default function Admin() {
             </div>
           </div>
         )}
+
+        {tab === "inventory" && (
+          <InventoryPanel products={products} onAdjust={adjustStock} />
+        )}
+
+        {tab === "clients" && (
+          <ClientsPanel onOpenConversation={(id) => { setPendingConversationId(id); setTab("messages"); }} />
+        )}
+
+        {tab === "settings" && <SettingsPanel />}
 
         {tab === "orders" && (
           <div>
@@ -374,6 +437,7 @@ export default function Admin() {
         {tab === "stats" && <StatsPanel />}
 
         {tab === "team" && role === "super_admin" && <TeamPanel currentEmail={sessionEmail} />}
+        </div>
       </div>
 
       {showForm && (
@@ -382,6 +446,90 @@ export default function Admin() {
           onCancel={() => { setShowForm(false); setEditingProduct(null); }}
           onSave={saveProductForm}
         />
+      )}
+    </div>
+  );
+}
+
+function InventoryPanel({ products, onAdjust }) {
+  const [filter, setFilter] = useState("tous");
+
+  const withStatus = products.map((p) => ({
+    ...p,
+    status: p.stock === 0 ? "rupture" : p.stock / p.capacity < 0.2 ? "faible" : "ok",
+  }));
+
+  const filtered = withStatus
+    .filter((p) => filter === "tous" || p.status === filter)
+    .sort((a, b) => a.stock - b.stock);
+
+  const counts = {
+    tous: withStatus.length,
+    rupture: withStatus.filter((p) => p.status === "rupture").length,
+    faible: withStatus.filter((p) => p.status === "faible").length,
+  };
+
+  return (
+    <div>
+      <h3 className="font-display text-2xl mb-1 text-void">Stock</h3>
+      <p className="text-sm text-ash mb-4">Niveaux de stock de tous les produits, ajustables en un clic.</p>
+
+      <div className="flex gap-2 mb-4">
+        {[
+          { id: "tous", label: `Tous (${counts.tous})` },
+          { id: "faible", label: `Stock faible (${counts.faible})` },
+          { id: "rupture", label: `Rupture (${counts.rupture})` },
+        ].map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+              filter === f.id ? "bg-void text-white" : "bg-paperdeep text-sack"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-ash">Aucun produit dans cette catégorie.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-paperdeep">
+          <table className="w-full text-sm bg-white">
+            <thead>
+              <tr className="bg-paperdeep text-sack">
+                <th className="text-left px-4 py-3 font-semibold">Produit</th>
+                <th className="text-left px-4 py-3 font-semibold">Catégorie</th>
+                <th className="text-left px-4 py-3 font-semibold">Niveau</th>
+                <th className="text-left px-4 py-3 font-semibold">Stock</th>
+                <th className="text-left px-4 py-3 font-semibold">Ajuster</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p) => (
+                <tr key={p.id} className="border-t border-paperdeep">
+                  <td className="px-4 py-3 font-medium">{p.name}</td>
+                  <td className="px-4 py-3"><Badge className={CATEGORY_COLORS[p.category]}>{p.category}</Badge></td>
+                  <td className="px-4 py-3 w-40"><StockGauge stock={p.stock} capacity={p.capacity} /></td>
+                  <td className="px-4 py-3">
+                    <span className={`font-mono ${p.status !== "ok" ? "text-emberdeep" : ""}`}>{p.stock}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => onAdjust(p.id, -1)} className="w-6 h-6 flex items-center justify-center rounded-full bg-paperdeep">
+                        <Minus size={12} />
+                      </button>
+                      <button onClick={() => onAdjust(p.id, 1)} className="w-6 h-6 flex items-center justify-center rounded-full bg-paperdeep">
+                        <Plus size={12} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

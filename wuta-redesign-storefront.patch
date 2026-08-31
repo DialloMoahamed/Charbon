@@ -1,0 +1,530 @@
+diff --git a/app/globals.css b/app/globals.css
+index 0b1b689..602c1cc 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -1,4 +1,4 @@
+-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
++@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+ 
+ @tailwind base;
+ @tailwind components;
+@@ -9,7 +9,8 @@ body {
+ }
+ 
+ .font-display {
+-  font-family: "Fraunces", serif;
++  font-family: "Manrope", sans-serif;
++  font-weight: 700;
+ }
+ 
+ .font-mono {
+@@ -17,7 +18,7 @@ body {
+ }
+ 
+ :focus-visible {
+-  outline: 2px solid #ff6b35;
++  outline: 2px solid #d97706;
+   outline-offset: 2px;
+ }
+ 
+diff --git a/components/Shop.js b/components/Shop.js
+index c89bb3d..15a2e4c 100644
+--- a/components/Shop.js
++++ b/components/Shop.js
+@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
+ import dynamic from "next/dynamic";
+ import {
+   ShoppingCart, Plus, Minus, X, Check, Flame, Truck, Phone, MapPin,
+-  Package, Leaf, Menu, Lock,
++  Package, Leaf, Menu, Lock, Search, Home, Factory, ChevronDown,
+ } from "lucide-react";
+ import { Badge, StockGauge, formatFCFA, CATEGORY_COLORS } from "./ui";
+ import { SackIllustration, HeroIllustration } from "./illustrations";
+@@ -14,6 +14,12 @@ const LocationPicker = dynamic(() => import("./LocationPicker"), { ssr: false })
+ 
+ const ICONS = { sack: Package, flame: Flame, truck: Truck, leaf: Leaf };
+ const CATEGORIES = ["Tous", "Ménage", "Grillade", "Industriel", "Écologique"];
++const CATEGORY_CARDS = [
++  { name: "Ménage", Icon: Home, tone: "bg-sack", desc: "Charbon pour usage quotidien" },
++  { name: "Grillade", Icon: Flame, tone: "bg-emberdeep", desc: "Idéal pour vos moments grillades" },
++  { name: "Industriel", Icon: Factory, tone: "bg-steel", desc: "Pour restaurants, boulangeries, etc." },
++  { name: "Écologique", Icon: Leaf, tone: "bg-leaf", desc: "Charbon écologique et durable" },
++];
+ const CART_KEY = "wuta_cart_v1";
+ 
+ export default function Shop({ contactPhone, contactCity }) {
+@@ -126,72 +132,70 @@ export default function Shop({ contactPhone, contactCity }) {
+       )}
+ 
+       {/* Header */}
+-      <header className="sticky top-0 z-40 flex items-center justify-between px-5 py-3 md:px-10 bg-void border-b border-voidline">
+-        <div className="flex items-center gap-2">
+-          <Flame size={22} className="text-ember" />
+-          <span className="font-display text-xl tracking-tight text-paper">WUTA</span>
+-          <span className="hidden sm:inline text-xs font-mono text-ash">charbon &amp; braise</span>
++      <header className="sticky top-0 z-40 flex items-center justify-between px-5 py-3 md:px-10 bg-white border-b border-paperdeep">
++        <div className="flex items-center gap-2.5">
++          <span className="w-9 h-9 rounded-full flex items-center justify-center bg-ember/10">
++            <Flame size={19} className="text-ember" />
++          </span>
++          <div className="leading-tight">
++            <div className="font-display text-lg tracking-tight text-void">WUTA</div>
++            <div className="hidden sm:block text-[10px] uppercase tracking-wider text-ash">Charbon &amp; Livraison</div>
++          </div>
+         </div>
+-        <nav className="hidden md:flex items-center gap-6 text-sm text-ashlight">
+-          <a href="#boutique" className="hover:text-white">Boutique</a>
+-          <a href="#comment" className="hover:text-white">Comment commander</a>
+-          <a href="#contact" className="hover:text-white">Contact</a>
+-          <a href="/admin" className="hover:text-white flex items-center gap-1">
+-            <Lock size={14} /> Espace pro
+-          </a>
++        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-sack">
++          <a href="#accueil" className="text-ember">Accueil</a>
++          <a href="#boutique" className="hover:text-void">Produits</a>
++          <a href="#apropos" className="hover:text-void">À propos</a>
++          <a href="#comment" className="hover:text-void">Livraison</a>
++          <a href="#contact" className="hover:text-void">Contact</a>
+         </nav>
+         <div className="flex items-center gap-2">
++          <button className="hidden sm:flex p-2 rounded-lg text-sack hover:bg-paperdeep" aria-label="Rechercher">
++            <Search size={18} />
++          </button>
+           <button
+             onClick={() => setCartOpen(true)}
+-            className="relative flex items-center gap-2 px-3 py-2 rounded-lg bg-ember text-void font-semibold text-sm"
++            className="relative flex items-center gap-2 px-4 py-2.5 rounded-lg bg-ember text-white font-semibold text-sm shadow-sm shadow-ember/30"
+           >
+-            <ShoppingCart size={18} />
+-            <span className="hidden sm:inline">Panier</span>
+-            {cartCount > 0 && (
+-              <span className="absolute -top-2 -right-2 text-xs w-5 h-5 flex items-center justify-center rounded-full bg-void text-paper font-bold">
+-                {cartCount}
+-              </span>
+-            )}
++            <ShoppingCart size={17} />
++            <span>Panier{cartCount > 0 ? ` (${cartCount})` : ""}</span>
+           </button>
+-          <button className="md:hidden p-2 rounded-lg text-paper" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
++          <button className="md:hidden p-2 rounded-lg text-void" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
+             <Menu size={20} />
+           </button>
+         </div>
+       </header>
+       {mobileNavOpen && (
+-        <div className="md:hidden flex flex-col px-5 py-3 gap-3 text-sm bg-voidsoft text-ashlight">
+-          <a href="#boutique" onClick={() => setMobileNavOpen(false)}>Boutique</a>
+-          <a href="#comment" onClick={() => setMobileNavOpen(false)}>Comment commander</a>
++        <div className="md:hidden flex flex-col px-5 py-3 gap-3 text-sm bg-white border-b border-paperdeep text-sack">
++          <a href="#boutique" onClick={() => setMobileNavOpen(false)}>Produits</a>
++          <a href="#comment" onClick={() => setMobileNavOpen(false)}>Livraison</a>
+           <a href="#contact" onClick={() => setMobileNavOpen(false)}>Contact</a>
+-          <a href="/admin">Espace pro</a>
++          <a href="/admin" className="flex items-center gap-1 text-void font-medium"><Lock size={14} /> Espace pro</a>
+         </div>
+       )}
+ 
+       {/* Hero */}
+-      <section
+-        className="relative overflow-hidden px-6 py-16 md:py-24 md:px-14 bg-void"
+-        style={{ backgroundImage: "radial-gradient(ellipse at 30% 100%, rgba(192,67,42,0.15), #1B1512 65%)" }}
+-      >
++      <section id="accueil" className="relative overflow-hidden px-6 py-14 md:py-20 md:px-14 bg-paper">
+         <div className="relative grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+           <div className="max-w-xl order-2 md:order-1">
+-            <Badge className="bg-emberdeep">Livraison à {contactCity.split(",")[0]} sous 24h</Badge>
+-            <h1 className="font-display mt-5 text-4xl md:text-6xl leading-[1.05] text-paper font-semibold">
+-              Le feu qui tient toute la nuit.
++            <Badge className="bg-ember/10 !text-ember">Du charbon de qualité</Badge>
++            <h1 className="font-display mt-5 text-4xl md:text-6xl leading-[1.05] text-void">
++              Livré chez vous.
+             </h1>
+-            <p className="mt-5 text-base md:text-lg text-ashlight">
+-              Charbon de bois dur, braise pour grillades et charbon industriel, vendus au sac ou en gros.
+-              Commandez en ligne, payez à la livraison.
++            <p className="mt-5 text-base md:text-lg text-sack">
++              Commandez facilement votre charbon et faites-vous livrer à domicile.
++              Bois dur, braise pour grillades et charbon industriel, payés à la réception.
+             </p>
+             <div className="mt-8 flex flex-wrap gap-3">
+-              <a href="#boutique" className="px-6 py-3 rounded-lg font-semibold text-sm bg-ember text-void">
+-                Voir la boutique
++              <a href="#boutique" className="px-6 py-3 rounded-lg font-semibold text-sm bg-ember text-white shadow-sm shadow-ember/30">
++                Commander maintenant
+               </a>
+-              <a href="#comment" className="px-6 py-3 rounded-lg font-semibold text-sm border border-voidline text-paper">
+-                Comment ça marche
++              <a href="#boutique" className="px-6 py-3 rounded-lg font-semibold text-sm border border-voidline text-void">
++                Voir les produits
+               </a>
+             </div>
+           </div>
+-          <div className="order-1 md:order-2 h-56 md:h-80 -mx-6 md:mx-0">
++          <div className="order-1 md:order-2 h-56 md:h-80 -mx-6 md:mx-0 rounded-wuta overflow-hidden bg-void">
+             <HeroIllustration />
+           </div>
+         </div>
+@@ -200,13 +204,13 @@ export default function Shop({ contactPhone, contactCity }) {
+       {/* Bandeau confiance */}
+       <section className="grid grid-cols-2 md:grid-cols-4 gap-4 px-6 py-10 md:px-14 bg-paperdeep">
+         {[
+-          { Icon: Truck, label: `Livraison ${contactCity}` },
+-          { Icon: Flame, label: "Bois dur, braise longue durée" },
++          { Icon: Truck, label: `Livraison rapide à ${contactCity.split(",")[0]}` },
+           { Icon: Phone, label: "Paiement à la livraison" },
+-          { Icon: Leaf, label: "Gamme éco-charbon disponible" },
++          { Icon: Flame, label: "Charbon de qualité sélectionné" },
++          { Icon: Leaf, label: "Service client réactif" },
+         ].map(({ Icon, label }) => (
+           <div key={label} className="flex flex-col items-center text-center gap-2">
+-            <div className="w-11 h-11 rounded-full flex items-center justify-center bg-void text-ember">
++            <div className="w-11 h-11 rounded-full flex items-center justify-center bg-white text-ember shadow-sm">
+               <Icon size={18} />
+             </div>
+             <span className="text-xs md:text-sm text-sack">{label}</span>
+@@ -214,82 +218,130 @@ export default function Shop({ contactPhone, contactCity }) {
+         ))}
+       </section>
+ 
++      {/* Catégories */}
++      <section className="px-6 py-16 md:px-14">
++        <div className="mb-8">
++          <span className="text-xs font-mono uppercase tracking-widest text-ash">Explorer</span>
++          <h2 className="font-display text-3xl mt-1 text-void">Nos catégories</h2>
++        </div>
++        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
++          {CATEGORY_CARDS.map(({ name, Icon, tone, desc }) => (
++            <button
++              key={name}
++              onClick={() => setCategoryFilter(name)}
++              className={`text-left rounded-wuta p-6 text-white ${tone} hover:-translate-y-1 transition`}
++            >
++              <Icon size={22} />
++              <h3 className="font-display text-lg mt-4">{name}</h3>
++              <p className="text-sm mt-1 opacity-85">{desc}</p>
++              <span className="inline-block text-xs font-semibold mt-4 underline underline-offset-2">
++                Voir les produits →
++              </span>
++            </button>
++          ))}
++        </div>
++      </section>
++
+       {/* Boutique */}
+-      <section id="boutique" className="px-6 py-16 md:px-14">
++      <section id="boutique" className="px-6 py-16 md:px-14 bg-paperdeep/40">
+         <div className="flex items-end justify-between flex-wrap gap-4 mb-8">
+           <div>
+             <span className="text-xs font-mono uppercase tracking-widest text-ash">Catalogue</span>
+-            <h2 className="font-display text-3xl mt-1">Nos sacs de charbon</h2>
++            <h2 className="font-display text-3xl mt-1 text-void">Nos sacs de charbon</h2>
+           </div>
+-          <div className="flex flex-wrap gap-2">
+-            {CATEGORIES.map((c) => (
+-              <button
+-                key={c}
+-                onClick={() => setCategoryFilter(c)}
+-                className={`px-4 py-2 rounded-full text-sm font-medium border ${
+-                  categoryFilter === c ? "bg-void text-paper border-void" : "text-sack border-paperdeep"
+-                }`}
+-              >
+-                {c}
+-              </button>
+-            ))}
++          <div className="flex items-center gap-2 text-sm text-sack">
++            <span className="hidden sm:inline text-ash">Trier par :</span>
++            <button className="flex items-center gap-1 px-3 py-2 rounded-lg border border-paperdeep bg-white font-medium">
++              Popularité <ChevronDown size={14} />
++            </button>
+           </div>
+         </div>
+ 
+-        {loading ? (
+-          <p className="text-sm text-ash">Chargement du catalogue…</p>
+-        ) : filteredProducts.length === 0 ? (
+-          <p className="text-sm text-ash">Aucun produit dans cette catégorie pour le moment.</p>
+-        ) : (
+-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+-            {filteredProducts.map((p) => {
+-              const Icon = ICONS[p.icon] || Package;
+-              const outOfStock = p.stock === 0;
+-              const lowStock = !outOfStock && p.stock / p.capacity < 0.2;
+-              return (
+-                <div key={p.id} className="rounded-2xl overflow-hidden flex flex-col bg-white border border-paperdeep hover:-translate-y-1 hover:shadow-xl transition">
+-                  <div className="h-40 bg-paperdeep">
+-                    {p.imageUrl ? (
+-                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+-                    ) : (
+-                      <SackIllustration category={p.category} Icon={Icon} />
+-                    )}
+-                  </div>
+-                  <div className="p-5 flex flex-col flex-1">
+-                    <div className="flex items-center justify-between gap-2">
+-                      <Badge className={CATEGORY_COLORS[p.category]}>{p.category}</Badge>
+-                      <span className="font-mono text-xs text-ash">{p.weightKg} kg</span>
+-                    </div>
+-                    <h3 className="font-display text-lg mt-3">{p.name}</h3>
+-                    <p className="text-sm mt-2 flex-1 text-sack">{p.description}</p>
+-                    <p className="text-xs mt-3 font-mono text-ash">Braise : {p.burnTime}</p>
+-
+-                    <div className="mt-4">
+-                      <div className="flex items-center justify-between text-xs mb-1 text-ash">
+-                        <span>Stock</span>
+-                        <span>{outOfStock ? "Rupture" : lowStock ? "Stock limité" : `${p.stock} disponibles`}</span>
++        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
++          {/* Sidebar filtres */}
++          <aside className="space-y-6">
++            <div>
++              <h3 className="text-xs font-semibold uppercase tracking-wide text-ash mb-3">Catégories</h3>
++              <div className="flex flex-col gap-1">
++                {CATEGORIES.map((c) => (
++                  <button
++                    key={c}
++                    onClick={() => setCategoryFilter(c)}
++                    className={`text-left px-3 py-2 rounded-lg text-sm font-medium ${
++                      categoryFilter === c ? "bg-void text-white" : "text-sack hover:bg-paperdeep"
++                    }`}
++                  >
++                    {c === "Tous" ? "Tous les produits" : c}
++                  </button>
++                ))}
++              </div>
++            </div>
++            <div className="pt-4 border-t border-paperdeep">
++              <h3 className="text-xs font-semibold uppercase tracking-wide text-ash mb-3">Disponibilité</h3>
++              <label className="flex items-center gap-2 text-sm text-sack">
++                <input type="checkbox" defaultChecked className="accent-ember" /> En stock
++              </label>
++            </div>
++          </aside>
++
++          {/* Grille produits */}
++          <div>
++            {loading ? (
++              <p className="text-sm text-ash">Chargement du catalogue…</p>
++            ) : filteredProducts.length === 0 ? (
++              <p className="text-sm text-ash">Aucun produit dans cette catégorie pour le moment.</p>
++            ) : (
++              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
++                {filteredProducts.map((p) => {
++                  const Icon = ICONS[p.icon] || Package;
++                  const outOfStock = p.stock === 0;
++                  const lowStock = !outOfStock && p.stock / p.capacity < 0.2;
++                  return (
++                    <div key={p.id} className="rounded-wuta overflow-hidden flex flex-col bg-white border border-paperdeep hover:-translate-y-1 hover:shadow-xl transition">
++                      <div className="aspect-[4/3] bg-paperdeep">
++                        {p.imageUrl ? (
++                          <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
++                        ) : (
++                          <SackIllustration category={p.category} Icon={Icon} />
++                        )}
+                       </div>
+-                      <StockGauge stock={p.stock} capacity={p.capacity} />
+-                    </div>
++                      <div className="p-5 flex flex-col flex-1">
++                        <div className="flex items-center justify-between gap-2">
++                          <Badge className={CATEGORY_COLORS[p.category]}>{p.category}</Badge>
++                          <span className="font-mono text-xs text-ash">{p.weightKg} kg</span>
++                        </div>
++                        <h3 className="font-display text-lg mt-3 text-void">{p.name}</h3>
++                        <p className="text-sm mt-2 flex-1 text-sack">{p.description}</p>
++                        <p className="text-xs mt-3 font-mono text-ash">Braise : {p.burnTime}</p>
+ 
+-                    <div className="mt-5 flex items-center justify-between">
+-                      <span className="font-display text-xl">{formatFCFA(p.price)}</span>
+-                      <button
+-                        disabled={outOfStock}
+-                        onClick={() => addToCart(p)}
+-                        className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 ${
+-                          outOfStock ? "bg-paperdeep text-ash cursor-not-allowed" : "bg-void text-paper"
+-                        }`}
+-                      >
+-                        <Plus size={16} /> Ajouter
+-                      </button>
++                        <div className="mt-4">
++                          <div className="flex items-center justify-between text-xs mb-1 text-ash">
++                            <span>Stock</span>
++                            <span>{outOfStock ? "Rupture" : lowStock ? "Stock limité" : `${p.stock} disponibles`}</span>
++                          </div>
++                          <StockGauge stock={p.stock} capacity={p.capacity} />
++                        </div>
++
++                        <div className="mt-5 flex items-center justify-between">
++                          <span className="font-display text-xl text-void">{formatFCFA(p.price)}</span>
++                          <button
++                            disabled={outOfStock}
++                            onClick={() => addToCart(p)}
++                            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 ${
++                              outOfStock ? "bg-paperdeep text-ash cursor-not-allowed" : "bg-ember text-white shadow-sm shadow-ember/30"
++                            }`}
++                          >
++                            <Plus size={16} /> Ajouter
++                          </button>
++                        </div>
++                      </div>
+                     </div>
+-                  </div>
+-                </div>
+-              );
+-            })}
++                  );
++                })}
++              </div>
++            )}
+           </div>
+-        )}
++        </div>
+       </section>
+ 
+       {/* Comment commander */}
+diff --git a/components/illustrations.js b/components/illustrations.js
+index 5790c37..9843cb2 100644
+--- a/components/illustrations.js
++++ b/components/illustrations.js
+@@ -1,10 +1,10 @@
+ "use client";
+ 
+ const CATEGORY_HEX = {
+-  "Ménage": "#5C4A38",
+-  "Grillade": "#C0432A",
+-  "Industriel": "#5B6472",
+-  "Écologique": "#5B7A4A",
++  "Ménage": "#78350F",
++  "Grillade": "#B45309",
++  "Industriel": "#57534E",
++  "Écologique": "#16A34A",
+ };
+ 
+ /**
+@@ -13,7 +13,7 @@ const CATEGORY_HEX = {
+  * Nettement plus soignée qu'une icône générique posée sur un fond uni.
+  */
+ export function SackIllustration({ category, Icon }) {
+-  const color = CATEGORY_HEX[category] || "#5C4A38";
++  const color = CATEGORY_HEX[category] || "#78350F";
+   const uid = category.replace(/[^a-zA-Z]/g, "");
+ 
+   return (
+@@ -28,7 +28,7 @@ export function SackIllustration({ category, Icon }) {
+           <stop offset="100%" stopColor={color} stopOpacity="0.75" />
+         </linearGradient>
+         <pattern id={`hatch-${uid}`} width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+-          <line x1="0" y1="0" x2="0" y2="7" stroke="#F2ECE1" strokeOpacity="0.18" strokeWidth="2" />
++          <line x1="0" y1="0" x2="0" y2="7" stroke="#FAFAF9" strokeOpacity="0.18" strokeWidth="2" />
+         </pattern>
+       </defs>
+ 
+@@ -49,14 +49,14 @@ export function SackIllustration({ category, Icon }) {
+       {/* col noué en haut */}
+       <path d="M96 46 C96 60 92 62 92 62 L148 62 C148 62 144 60 144 46 Z" fill={color} opacity="0.9" />
+       <ellipse cx="120" cy="46" rx="24" ry="8" fill={color} />
+-      <path d="M104 40 Q120 30 136 40" stroke="#F2ECE1" strokeOpacity="0.5" strokeWidth="3" fill="none" strokeLinecap="round" />
++      <path d="M104 40 Q120 30 136 40" stroke="#FAFAF9" strokeOpacity="0.5" strokeWidth="3" fill="none" strokeLinecap="round" />
+ 
+       {/* couture centrale */}
+-      <path d="M120 66 L120 150" stroke="#F2ECE1" strokeOpacity="0.25" strokeWidth="1.5" strokeDasharray="3 4" />
++      <path d="M120 66 L120 150" stroke="#FAFAF9" strokeOpacity="0.25" strokeWidth="1.5" strokeDasharray="3 4" />
+ 
+       {/* étiquette avec icône de catégorie */}
+       <g transform="translate(120,108)">
+-        <circle r="22" fill="#F2ECE1" opacity="0.95" />
++        <circle r="22" fill="#FAFAF9" opacity="0.95" />
+         <circle r="22" fill="none" stroke={color} strokeOpacity="0.3" strokeWidth="1.5" />
+         <foreignObject x="-12" y="-12" width="24" height="24">
+           <div style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", color }}>
+@@ -77,17 +77,17 @@ export function HeroIllustration() {
+     <svg viewBox="0 0 480 320" className="w-full h-full" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+       <defs>
+         <linearGradient id="heroGlow" x1="0.3" y1="1" x2="0.7" y2="0">
+-          <stop offset="0%" stopColor="#C0432A" stopOpacity="0.35" />
+-          <stop offset="60%" stopColor="#C0432A" stopOpacity="0.08" />
+-          <stop offset="100%" stopColor="#C0432A" stopOpacity="0" />
++          <stop offset="0%" stopColor="#B45309" stopOpacity="0.35" />
++          <stop offset="60%" stopColor="#B45309" stopOpacity="0.08" />
++          <stop offset="100%" stopColor="#B45309" stopOpacity="0" />
+         </linearGradient>
+         <linearGradient id="sackA" x1="0" y1="0" x2="0" y2="1">
+-          <stop offset="0%" stopColor="#5C4A38" />
+-          <stop offset="100%" stopColor="#463628" />
++          <stop offset="0%" stopColor="#78350F" />
++          <stop offset="100%" stopColor="#5C2E0A" />
+         </linearGradient>
+         <linearGradient id="sackB" x1="0" y1="0" x2="0" y2="1">
+-          <stop offset="0%" stopColor="#7A6248" />
+-          <stop offset="100%" stopColor="#5C4A38" />
++          <stop offset="0%" stopColor="#92400E" />
++          <stop offset="100%" stopColor="#78350F" />
+         </linearGradient>
+       </defs>
+ 
+@@ -99,17 +99,17 @@ export function HeroIllustration() {
+       <path d="M350 265 C346 232 349 205 360 188 C374 179 406 179 419 188 C430 205 432 232 428 265 C414 276 364 276 350 265 Z" fill="url(#sackB)" opacity="0.85" />
+       {/* sac principal, au centre */}
+       <path d="M175 300 C168 250 172 210 190 185 C210 172 270 172 290 185 C308 210 312 250 305 300 C284 316 196 316 175 300 Z" fill="url(#sackA)" />
+-      <path d="M205 178 C205 165 200 160 200 160 L280 160 C280 160 275 165 275 178 Z" fill="#463628" />
+-      <ellipse cx="240" cy="160" rx="38" ry="10" fill="#463628" />
+-      <path d="M215 300 C215 260 218 225 225 200" stroke="#F2ECE1" strokeOpacity="0.12" strokeWidth="3" fill="none" />
+-      <path d="M255 300 C255 260 258 225 265 200" stroke="#F2ECE1" strokeOpacity="0.12" strokeWidth="3" fill="none" />
++      <path d="M205 178 C205 165 200 160 200 160 L280 160 C280 160 275 165 275 178 Z" fill="#5C2E0A" />
++      <ellipse cx="240" cy="160" rx="38" ry="10" fill="#5C2E0A" />
++      <path d="M215 300 C215 260 218 225 225 200" stroke="#FAFAF9" strokeOpacity="0.12" strokeWidth="3" fill="none" />
++      <path d="M255 300 C255 260 258 225 265 200" stroke="#FAFAF9" strokeOpacity="0.12" strokeWidth="3" fill="none" />
+ 
+       {/* braises qui montent */}
+       {[
+         [150, 150, 4], [320, 170, 3], [240, 120, 5], [200, 90, 3],
+         [280, 100, 4], [240, 60, 3], [170, 200, 3], [310, 220, 3],
+       ].map(([cx, cy, r], i) => (
+-        <circle key={i} cx={cx} cy={cy} r={r} fill="#FF6B35" opacity="0.85">
++        <circle key={i} cx={cx} cy={cy} r={r} fill="#D97706" opacity="0.85">
+           <animate attributeName="opacity" values="0.9;0.3;0.9" dur={`${2.4 + (i % 3)}s`} repeatCount="indefinite" begin={`${i * 0.3}s`} />
+         </circle>
+       ))}
+diff --git a/tailwind.config.js b/tailwind.config.js
+index 6e1dbf5..08dc51f 100644
+--- a/tailwind.config.js
++++ b/tailwind.config.js
+@@ -7,25 +7,29 @@ module.exports = {
+   theme: {
+     extend: {
+       colors: {
+-        void: "#1B1512",
+-        voidsoft: "#241C17",
+-        voidline: "#3A2F26",
+-        ember: "#FF6B35",
+-        emberdeep: "#C0432A",
+-        ash: "#8C8177",
+-        ashlight: "#C9C0B4",
+-        paper: "#F2ECE1",
+-        paperdeep: "#E8DFCF",
+-        sack: "#5C4A38",
+-        sacklight: "#7A6248",
+-        leaf: "#5B7A4A",
+-        steel: "#5B6472",
++        // Palette officielle — cahier des charges §14 (Direction artistique / UI)
++        void: "#171717", // couleur primaire — header, texte fort, navigation
++        voidsoft: "#262626",
++        voidline: "#404040",
++        sack: "#78350F", // brun terre — catégories, accents naturels
++        sacklight: "#92400E",
++        ember: "#D97706", // orange feu — CTA, prix, états d'action
++        emberdeep: "#B45309",
++        paper: "#FAFAF9", // fond clair — arrière-plan principal
++        paperdeep: "#F5F1E8", // beige sable — sections, surfaces
++        ash: "#78716C",
++        ashlight: "#A8A29E",
++        leaf: "#16A34A",
++        steel: "#57534E",
+       },
+       fontFamily: {
+-        display: ["Fraunces", "serif"],
++        display: ["Manrope", "sans-serif"],
+         body: ["Inter", "sans-serif"],
+         mono: ["IBM Plex Mono", "monospace"],
+       },
++      borderRadius: {
++        wuta: "14px",
++      },
+       keyframes: {
+         rise: {
+           "0%": { transform: "translateY(0)", opacity: 0 },

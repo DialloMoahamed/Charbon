@@ -1,4 +1,3 @@
-
 # 🔥 WUTA — Boutique de charbon en ligne
 
 > **Du charbon de qualité, livré chez vous.**

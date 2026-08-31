@@ -7,24 +7,28 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        void: "#1B1512",
-        voidsoft: "#241C17",
-        voidline: "#3A2F26",
-        ember: "#FF6B35",
-        emberdeep: "#C0432A",
-        ash: "#8C8177",
-        ashlight: "#C9C0B4",
-        paper: "#F2ECE1",
-        paperdeep: "#E8DFCF",
-        sack: "#5C4A38",
-        sacklight: "#7A6248",
-        leaf: "#5B7A4A",
-        steel: "#5B6472",
+        // Palette officielle — cahier des charges §14 (Direction artistique / UI)
+        void: "#171717", // couleur primaire — header, texte fort, navigation
+        voidsoft: "#262626",
+        voidline: "#404040",
+        sack: "#78350F", // brun terre — catégories, accents naturels
+        sacklight: "#92400E",
+        ember: "#D97706", // orange feu — CTA, prix, états d'action
+        emberdeep: "#B45309",
+        paper: "#FAFAF9", // fond clair — arrière-plan principal
+        paperdeep: "#F5F1E8", // beige sable — sections, surfaces
+        ash: "#78716C",
+        ashlight: "#A8A29E",
+        leaf: "#16A34A",
+        steel: "#57534E",
       },
       fontFamily: {
-        display: ["Fraunces", "serif"],
+        display: ["Manrope", "sans-serif"],
         body: ["Inter", "sans-serif"],
         mono: ["IBM Plex Mono", "monospace"],
+      },
+      borderRadius: {
+        wuta: "14px",
       },
       keyframes: {
         rise: {

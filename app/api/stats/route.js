@@ -8,6 +8,30 @@ export async function GET() {
 
   // Les commandes annulées ne comptent ni dans le chiffre d'affaires ni
   // dans les quantités vendues.
+  const dailyRevenueRaw = db
+    .prepare(
+      `SELECT strftime('%Y-%m-%d', createdAt) AS day,
+              SUM(total) AS revenue,
+              COUNT(*) AS orders
+       FROM orders
+       WHERE status != 'Annulée' AND createdAt >= date('now', '-7 days')
+       GROUP BY day
+       ORDER BY day ASC`
+    )
+    .all();
+
+  // On complète les jours sans commande avec des valeurs à zéro, pour que le
+  // graphique "7 derniers jours" affiche toujours 8 points continus.
+  const dailyByDate = Object.fromEntries(dailyRevenueRaw.map((d) => [d.day, d]));
+  const dailyRevenue = [];
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const row = dailyByDate[key];
+    dailyRevenue.push({ day: key, revenue: row ? row.revenue : 0, orders: row ? row.orders : 0 });
+  }
+
   const monthlyRevenue = db
     .prepare(
       `SELECT strftime('%Y-%m', createdAt) AS month,
@@ -52,6 +76,7 @@ export async function GET() {
 
   return NextResponse.json({
     monthlyRevenue,
+    dailyRevenue,
     topProducts,
     statusBreakdown,
     totals: {

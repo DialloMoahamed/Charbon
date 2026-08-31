@@ -1,0 +1,1526 @@
+diff --git a/app/api/products/[id]/route.js b/app/api/products/[id]/route.js
+index f760df5..8c723db 100644
+--- a/app/api/products/[id]/route.js
++++ b/app/api/products/[id]/route.js
+@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
+ const db = require("../../../../lib/db");
+ const { getAdminSession } = require("../../../../lib/requireAdmin");
+ 
++export async function GET(request, { params }) {
++  const product = db.prepare("SELECT * FROM products WHERE id = ?").get(params.id);
++  if (!product) return NextResponse.json({ error: "Produit introuvable." }, { status: 404 });
++  return NextResponse.json(product);
++}
++
+ export async function PUT(request, { params }) {
+   const session = getAdminSession();
+   if (!session) return NextResponse.json({ error: "Non autorisé." }, { status: 401 });
+diff --git a/app/produits/[id]/page.js b/app/produits/[id]/page.js
+new file mode 100644
+index 0000000..1f5e5f4
+--- /dev/null
++++ b/app/produits/[id]/page.js
+@@ -0,0 +1,9 @@
++import ProductDetail from "../../../components/ProductDetail";
++
++export const metadata = { title: "Produit — WUTA" };
++
++export default function Page({ params }) {
++  const contactPhone = process.env.PUBLIC_CONTACT_PHONE || "Contactez-nous";
++  const contactCity = process.env.PUBLIC_CONTACT_CITY || "Niger";
++  return <ProductDetail productId={params.id} contactPhone={contactPhone} contactCity={contactCity} />;
++}
+diff --git a/app/produits/page.js b/app/produits/page.js
+new file mode 100644
+index 0000000..365e7d9
+--- /dev/null
++++ b/app/produits/page.js
+@@ -0,0 +1,14 @@
++import { Suspense } from "react";
++import ProductsPage from "../../components/ProductsPage";
++
++export const metadata = { title: "Produits — WUTA" };
++
++export default function Page() {
++  const contactPhone = process.env.PUBLIC_CONTACT_PHONE || "Contactez-nous";
++  const contactCity = process.env.PUBLIC_CONTACT_CITY || "Niger";
++  return (
++    <Suspense fallback={null}>
++      <ProductsPage contactPhone={contactPhone} contactCity={contactCity} />
++    </Suspense>
++  );
++}
+diff --git a/components/CartWidgets.js b/components/CartWidgets.js
+new file mode 100644
+index 0000000..763892b
+--- /dev/null
++++ b/components/CartWidgets.js
+@@ -0,0 +1,152 @@
++"use client";
++
++import { useState } from "react";
++import dynamic from "next/dynamic";
++import { X, Plus, Minus, Check } from "lucide-react";
++import { formatFCFA } from "./ui";
++
++const LocationPicker = dynamic(() => import("./LocationPicker"), { ssr: false });
++
++export function CartDrawer({ open, cartItems, cartTotal, onClose, onQtyChange, onCheckout }) {
++  if (!open) return null;
++  return (
++    <div className="fixed inset-0 z-50 flex justify-end">
++      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
++      <div className="relative w-full max-w-md h-full flex flex-col bg-white">
++        <div className="flex items-center justify-between px-5 py-4 border-b border-paperdeep">
++          <h3 className="font-display text-xl">Votre panier</h3>
++          <button onClick={onClose}><X size={20} /></button>
++        </div>
++        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
++          {cartItems.length === 0 && <p className="text-sm text-ash">Votre panier est vide pour l'instant.</p>}
++          {cartItems.map((item) => (
++            <div key={item.id} className="flex items-center gap-3 pb-4 border-b border-paperdeep">
++              <div className="flex-1">
++                <p className="text-sm font-semibold">{item.name}</p>
++                <p className="text-xs font-mono text-ash">{formatFCFA(item.price)}</p>
++              </div>
++              <div className="flex items-center gap-2">
++                <button onClick={() => onQtyChange(item.id, item.qty - 1)} className="w-7 h-7 flex items-center justify-center rounded-full bg-paperdeep">
++                  <Minus size={14} />
++                </button>
++                <span className="w-5 text-center text-sm">{item.qty}</span>
++                <button onClick={() => onQtyChange(item.id, item.qty + 1)} className="w-7 h-7 flex items-center justify-center rounded-full bg-paperdeep">
++                  <Plus size={14} />
++                </button>
++              </div>
++            </div>
++          ))}
++        </div>
++        {cartItems.length > 0 && (
++          <div className="px-5 py-4 border-t border-paperdeep">
++            <div className="flex items-center justify-between mb-4">
++              <span className="text-sm text-ash">Total</span>
++              <span className="font-display text-xl">{formatFCFA(cartTotal)}</span>
++            </div>
++            <button onClick={onCheckout} className="w-full py-3 rounded-lg font-semibold text-sm bg-void text-paper">
++              Passer la commande
++            </button>
++          </div>
++        )}
++      </div>
++    </div>
++  );
++}
++
++export function CheckoutModal({ total, onClose, onSubmit }) {
++  const [name, setName] = useState("");
++  const [phone, setPhone] = useState("");
++  const [address, setAddress] = useState("");
++  const [note, setNote] = useState("");
++  const [latitude, setLatitude] = useState(null);
++  const [longitude, setLongitude] = useState(null);
++  const [error, setError] = useState("");
++  const [submitting, setSubmitting] = useState(false);
++
++  async function submit() {
++    if (!name.trim() || !phone.trim() || !address.trim()) {
++      setError("Merci de renseigner votre nom, téléphone et adresse de livraison.");
++      return;
++    }
++    setError("");
++    setSubmitting(true);
++    try {
++      await onSubmit({ name, phone, address, note, latitude, longitude });
++    } catch (e) {
++      setError(e.message);
++    } finally {
++      setSubmitting(false);
++    }
++  }
++
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
++      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
++      <div className="relative max-w-md w-full rounded-2xl p-6 bg-white max-h-[92vh] overflow-y-auto">
++        <div className="flex items-center justify-between mb-4">
++          <h3 className="font-display text-xl">Finaliser la commande</h3>
++          <button onClick={onClose}><X size={20} /></button>
++        </div>
++        <div className="space-y-3">
++          <Field label="Nom complet" value={name} onChange={setName} placeholder="Ex : Aïcha Moussa" />
++          <Field label="Téléphone" value={phone} onChange={setPhone} placeholder="Ex : 90 00 00 00" />
++          <Field label="Quartier / adresse" value={address} onChange={setAddress} placeholder="Ex : Plateau, rue NB-12" />
++          <LocationPicker
++            latitude={latitude}
++            longitude={longitude}
++            onChange={(lat, lng) => { setLatitude(lat); setLongitude(lng); }}
++          />
++          <Field label="Note (facultatif)" value={note} onChange={setNote} placeholder="Repère, horaire préféré…" />
++          {error && <p className="text-xs text-emberdeep">{error}</p>}
++        </div>
++        <div className="flex items-center justify-between mt-5">
++          <span className="text-sm text-ash">Total à payer à la livraison</span>
++          <span className="font-display text-lg">{formatFCFA(total)}</span>
++        </div>
++        <button
++          onClick={submit}
++          disabled={submitting}
++          className="w-full mt-4 py-3 rounded-lg font-semibold text-sm bg-ember text-white disabled:opacity-60"
++        >
++          {submitting ? "Envoi…" : "Confirmer la commande"}
++        </button>
++      </div>
++    </div>
++  );
++}
++
++function Field({ label, value, onChange, placeholder }) {
++  return (
++    <div>
++      <label className="text-xs font-semibold text-ash">{label}</label>
++      <input
++        value={value}
++        onChange={(e) => onChange(e.target.value)}
++        placeholder={placeholder}
++        className="w-full mt-1 px-3 py-2 rounded-lg text-sm border border-paperdeep"
++      />
++    </div>
++  );
++}
++
++export function OrderConfirmModal({ order, onClose }) {
++  if (!order) return null;
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
++      <div className="absolute inset-0 bg-black/60" />
++      <div className="relative max-w-sm w-full rounded-2xl p-8 text-center bg-white">
++        <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center bg-leaf/20">
++          <Check size={28} className="text-leaf" />
++        </div>
++        <h3 className="font-display text-2xl mt-4">Commande reçue</h3>
++        <p className="text-sm mt-2 text-sack">
++          Référence <span className="font-mono">{order.reference}</span>. Un livreur vous contactera bientôt.
++        </p>
++        <p className="font-display text-xl mt-4">{formatFCFA(order.total)}</p>
++        <button onClick={onClose} className="mt-6 w-full py-3 rounded-lg font-semibold text-sm bg-void text-paper">
++          Continuer mes achats
++        </button>
++      </div>
++    </div>
++  );
++}
+diff --git a/components/ProductDetail.js b/components/ProductDetail.js
+new file mode 100644
+index 0000000..b4f878f
+--- /dev/null
++++ b/components/ProductDetail.js
+@@ -0,0 +1,202 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { Plus, Minus, ShoppingCart, Truck, Phone, Package, Flame, Leaf } from "lucide-react";
++import { Badge, StockGauge, formatFCFA, CATEGORY_COLORS } from "./ui";
++import { SackIllustration } from "./illustrations";
++import StoreHeader from "./StoreHeader";
++import StoreFooter from "./StoreFooter";
++import { CartDrawer, CheckoutModal, OrderConfirmModal } from "./CartWidgets";
++import { useCart } from "../lib/useCart";
++import { submitOrder } from "../lib/placeOrder";
++
++const ICONS = { sack: Package, flame: Flame, truck: Truck, leaf: Leaf };
++
++export default function ProductDetail({ productId, contactPhone, contactCity }) {
++  const [product, setProduct] = useState(null);
++  const [siblings, setSiblings] = useState([]);
++  const [qty, setQty] = useState(1);
++  const [loading, setLoading] = useState(true);
++  const [notFound, setNotFound] = useState(false);
++  const [cartOpen, setCartOpen] = useState(false);
++  const [checkoutOpen, setCheckoutOpen] = useState(false);
++  const [confirmedOrder, setConfirmedOrder] = useState(null);
++
++  const { cartItems, cartCount, cartTotal, addToCart, setCartQty, clearCart, toast, setToast } = useCart(siblings);
++
++  useEffect(() => {
++    setLoading(true);
++    setQty(1);
++    fetch(`/api/products/${productId}`)
++      .then((r) => {
++        if (!r.ok) throw new Error("not found");
++        return r.json();
++      })
++      .then((p) => {
++        setProduct(p);
++        fetch("/api/products")
++          .then((r) => r.json())
++          .then((all) => setSiblings(all));
++      })
++      .catch(() => setNotFound(true))
++      .finally(() => setLoading(false));
++  }, [productId]);
++
++  async function placeOrder(customer) {
++    const data = await submitOrder(cartItems, customer);
++    setSiblings((prev) => prev); // le stock affiché sera à jour au prochain chargement
++    clearCart();
++    setCheckoutOpen(false);
++    setCartOpen(false);
++    setConfirmedOrder(data);
++  }
++
++  function handleAdd() {
++    if (!product) return;
++    for (let i = 0; i < qty; i++) addToCart(product);
++  }
++
++  if (loading) {
++    return (
++      <div>
++        <StoreHeader cartCount={cartCount} onCartClick={() => setCartOpen(true)} active="produits" />
++        <p className="px-6 py-16 md:px-14 text-sm text-ash">Chargement du produit…</p>
++      </div>
++    );
++  }
++
++  if (notFound || !product) {
++    return (
++      <div>
++        <StoreHeader cartCount={cartCount} onCartClick={() => setCartOpen(true)} active="produits" />
++        <div className="px-6 py-16 md:px-14 text-center">
++          <p className="text-sm text-ash mb-4">Ce produit n'existe pas ou n'est plus disponible.</p>
++          <a href="/produits" className="px-5 py-2.5 rounded-lg bg-ember text-white text-sm font-semibold">
++            Retour au catalogue
++          </a>
++        </div>
++      </div>
++    );
++  }
++
++  const Icon = ICONS[product.icon] || Package;
++  const outOfStock = product.stock === 0;
++  const otherFormats = siblings.filter((p) => p.category === product.category && p.id !== product.id);
++
++  return (
++    <div>
++      {toast && (
++        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-lg bg-void text-paper">
++          {toast}
++        </div>
++      )}
++
++      <StoreHeader cartCount={cartCount} onCartClick={() => setCartOpen(true)} active="produits" />
++
++      <div className="px-6 py-8 md:px-14">
++        <p className="text-sm text-ash mb-6">
++          <a href="/" className="hover:text-void">Accueil</a> / <a href="/produits" className="hover:text-void">Produits</a> /{" "}
++          <span className="text-void">{product.name}</span>
++        </p>
++
++        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
++          {/* Galerie */}
++          <div className="aspect-square rounded-wuta overflow-hidden bg-paperdeep">
++            {product.imageUrl ? (
++              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
++            ) : (
++              <SackIllustration category={product.category} Icon={Icon} />
++            )}
++          </div>
++
++          {/* Détails */}
++          <div>
++            <Badge className={CATEGORY_COLORS[product.category]}>{product.category}</Badge>
++            <h1 className="font-display text-3xl mt-3 text-void">{product.name}</h1>
++            <p className="text-sm mt-1 text-ash">{product.weightKg} kg</p>
++
++            <p className="text-sm mt-5 text-sack">{product.description}</p>
++            {product.burnTime && <p className="text-xs mt-2 font-mono text-ash">Braise : {product.burnTime}</p>}
++
++            {otherFormats.length > 0 && (
++              <div className="mt-6">
++                <p className="text-xs font-semibold uppercase tracking-wide text-ash mb-2">
++                  Autres formats — {product.category}
++                </p>
++                <div className="flex flex-wrap gap-2">
++                  {otherFormats.map((p) => (
++                    <a
++                      key={p.id}
++                      href={`/produits/${p.id}`}
++                      className="px-3 py-2 rounded-lg border border-paperdeep text-sm hover:border-ember"
++                    >
++                      <span className="font-medium">{p.weightKg} kg</span>
++                      <span className="text-ash ml-1.5 font-mono text-xs">{formatFCFA(p.price)}</span>
++                    </a>
++                  ))}
++                </div>
++              </div>
++            )}
++
++            <div className="mt-6">
++              <div className="flex items-center justify-between text-xs mb-1 text-ash">
++                <span>Stock</span>
++                <span>{outOfStock ? "Rupture de stock" : `${product.stock} disponibles`}</span>
++              </div>
++              <StockGauge stock={product.stock} capacity={product.capacity} />
++            </div>
++
++            <div className="mt-6 flex items-center gap-4">
++              <span className="font-display text-3xl text-void">{formatFCFA(product.price)}</span>
++              {!outOfStock && (
++                <div className="flex items-center gap-2 border border-paperdeep rounded-lg px-2 py-1">
++                  <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-paperdeep">
++                    <Minus size={14} />
++                  </button>
++                  <span className="w-6 text-center text-sm">{qty}</span>
++                  <button onClick={() => setQty((q) => Math.min(product.stock, q + 1))} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-paperdeep">
++                    <Plus size={14} />
++                  </button>
++                </div>
++              )}
++            </div>
++
++            <button
++              disabled={outOfStock}
++              onClick={handleAdd}
++              className={`mt-5 w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm ${
++                outOfStock ? "bg-paperdeep text-ash cursor-not-allowed" : "bg-ember text-white shadow-sm shadow-ember/30"
++              }`}
++            >
++              <ShoppingCart size={17} /> Ajouter au panier
++            </button>
++
++            <div className="mt-8 space-y-3 pt-6 border-t border-paperdeep">
++              <p className="flex items-center gap-2 text-sm text-sack">
++                <Truck size={16} className="text-ember" /> Livraison rapide à {contactCity.split(",")[0]}
++              </p>
++              <p className="flex items-center gap-2 text-sm text-sack">
++                <Phone size={16} className="text-ember" /> Paiement à la livraison
++              </p>
++            </div>
++          </div>
++        </div>
++      </div>
++
++      <StoreFooter contactPhone={contactPhone} contactCity={contactCity} />
++
++      <CartDrawer
++        open={cartOpen && !confirmedOrder}
++        cartItems={cartItems}
++        cartTotal={cartTotal}
++        onClose={() => setCartOpen(false)}
++        onQtyChange={setCartQty}
++        onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }}
++      />
++      {checkoutOpen && (
++        <CheckoutModal total={cartTotal} onClose={() => setCheckoutOpen(false)} onSubmit={placeOrder} />
++      )}
++      <OrderConfirmModal order={confirmedOrder} onClose={() => setConfirmedOrder(null)} />
++    </div>
++  );
++}
+diff --git a/components/ProductsPage.js b/components/ProductsPage.js
+new file mode 100644
+index 0000000..6839fba
+--- /dev/null
++++ b/components/ProductsPage.js
+@@ -0,0 +1,303 @@
++"use client";
++
++import { useEffect, useMemo, useState } from "react";
++import { useSearchParams } from "next/navigation";
++import { ShoppingCart, ChevronDown, ChevronRight, Package, Flame, Truck, Leaf, SlidersHorizontal, X } from "lucide-react";
++import { formatFCFA } from "./ui";
++import { SackIllustration } from "./illustrations";
++import StoreHeader from "./StoreHeader";
++import StoreFooter from "./StoreFooter";
++import { CartDrawer, CheckoutModal, OrderConfirmModal } from "./CartWidgets";
++import { useCart } from "../lib/useCart";
++import { submitOrder } from "../lib/placeOrder";
++
++const ICONS = { sack: Package, flame: Flame, truck: Truck, leaf: Leaf };
++const CATEGORIES = ["Ménage", "Grillade", "Industriel", "Écologique"];
++const SORTS = [
++  { id: "popularite", label: "Popularité" },
++  { id: "prix-asc", label: "Prix croissant" },
++  { id: "prix-desc", label: "Prix décroissant" },
++  { id: "nom", label: "Nom (A → Z)" },
++];
++
++export default function ProductsPage({ contactPhone, contactCity }) {
++  const searchParams = useSearchParams();
++  const [products, setProducts] = useState([]);
++  const [loading, setLoading] = useState(true);
++  const [cartOpen, setCartOpen] = useState(false);
++  const [checkoutOpen, setCheckoutOpen] = useState(false);
++  const [confirmedOrder, setConfirmedOrder] = useState(null);
++
++  const [category, setCategory] = useState("Tous les produits");
++  const [availability, setAvailability] = useState({ enStock: false, rupture: false });
++  const [weights, setWeights] = useState([]);
++  const [maxPrice, setMaxPrice] = useState(25000);
++  const [sort, setSort] = useState("popularite");
++  const [sortOpen, setSortOpen] = useState(false);
++  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
++
++  const { cartItems, cartCount, cartTotal, addToCart, setCartQty, clearCart, toast } = useCart(products);
++
++  useEffect(() => {
++    fetch("/api/products").then((r) => r.json()).then(setProducts).finally(() => setLoading(false));
++  }, []);
++
++  useEffect(() => {
++    const c = searchParams.get("categorie");
++    if (c && CATEGORIES.includes(c)) setCategory(c);
++  }, [searchParams]);
++
++  const priceBounds = useMemo(() => {
++    if (products.length === 0) return { min: 0, max: 25000 };
++    const prices = products.map((p) => p.price);
++    return { min: Math.min(...prices), max: Math.max(...prices) };
++  }, [products]);
++
++  useEffect(() => {
++    setMaxPrice(priceBounds.max);
++  }, [priceBounds.max]);
++
++  const availableWeights = useMemo(
++    () => [...new Set(products.map((p) => p.weightKg))].sort((a, b) => a - b),
++    [products]
++  );
++
++  const inStockCount = products.filter((p) => p.stock > 0).length;
++  const outOfStockCount = products.filter((p) => p.stock === 0).length;
++
++  const filtered = useMemo(() => {
++    let list = products;
++    if (category !== "Tous les produits") list = list.filter((p) => p.category === category);
++    if (availability.enStock && !availability.rupture) list = list.filter((p) => p.stock > 0);
++    if (availability.rupture && !availability.enStock) list = list.filter((p) => p.stock === 0);
++    if (weights.length > 0) list = list.filter((p) => weights.includes(p.weightKg));
++    list = list.filter((p) => p.price <= maxPrice);
++
++    const sorted = [...list];
++    if (sort === "prix-asc") sorted.sort((a, b) => a.price - b.price);
++    else if (sort === "prix-desc") sorted.sort((a, b) => b.price - a.price);
++    else if (sort === "nom") sorted.sort((a, b) => a.name.localeCompare(b.name));
++    return sorted;
++  }, [products, category, availability, weights, maxPrice, sort]);
++
++  function toggleWeight(w) {
++    setWeights((prev) => (prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w]));
++  }
++
++  async function placeOrder(customer) {
++    const data = await submitOrder(cartItems, customer);
++    fetch("/api/products").then((r) => r.json()).then(setProducts);
++    clearCart();
++    setCheckoutOpen(false);
++    setCartOpen(false);
++    setConfirmedOrder(data);
++  }
++
++  const FiltersPanel = (
++    <>
++      <div>
++        <h3 className="text-sm font-semibold text-void mb-3">Catégories</h3>
++        <div className="flex flex-col gap-1">
++          {["Tous les produits", ...CATEGORIES].map((c) => (
++            <button
++              key={c}
++              onClick={() => setCategory(c)}
++              className={`text-left px-3 py-2 rounded-lg text-sm ${
++                category === c ? "bg-paperdeep font-semibold text-void" : "text-sack hover:bg-paperdeep/60"
++              }`}
++            >
++              {c}
++            </button>
++          ))}
++        </div>
++      </div>
++
++      <div className="pt-5 mt-5 border-t border-paperdeep">
++        <h3 className="text-sm font-semibold text-void mb-3">Filtres</h3>
++
++        <p className="text-xs font-semibold text-ash uppercase tracking-wide mb-2">Disponibilité</p>
++        <div className="space-y-2 mb-4">
++          <label className="flex items-center gap-2 text-sm text-sack">
++            <input
++              type="checkbox"
++              className="accent-ember"
++              checked={availability.enStock}
++              onChange={(e) => setAvailability((a) => ({ ...a, enStock: e.target.checked }))}
++            />
++            En stock ({inStockCount})
++          </label>
++          <label className="flex items-center gap-2 text-sm text-sack">
++            <input
++              type="checkbox"
++              className="accent-ember"
++              checked={availability.rupture}
++              onChange={(e) => setAvailability((a) => ({ ...a, rupture: e.target.checked }))}
++            />
++            Rupture ({outOfStockCount})
++          </label>
++        </div>
++
++        <p className="text-xs font-semibold text-ash uppercase tracking-wide mb-2">Poids</p>
++        <div className="space-y-2 mb-4">
++          {availableWeights.map((w) => (
++            <label key={w} className="flex items-center gap-2 text-sm text-sack">
++              <input type="checkbox" className="accent-ember" checked={weights.includes(w)} onChange={() => toggleWeight(w)} />
++              {w} kg
++            </label>
++          ))}
++        </div>
++
++        <p className="text-xs font-semibold text-ash uppercase tracking-wide mb-2">Prix</p>
++        <input
++          type="range"
++          min={priceBounds.min}
++          max={priceBounds.max}
++          value={maxPrice}
++          onChange={(e) => setMaxPrice(Number(e.target.value))}
++          className="w-full accent-ember"
++        />
++        <div className="flex justify-between text-xs text-ash mt-1 mb-4">
++          <span>{formatFCFA(priceBounds.min)}</span>
++          <span>{formatFCFA(maxPrice)}</span>
++        </div>
++
++        <button
++          onClick={() => setMobileFiltersOpen(false)}
++          className="w-full py-2.5 rounded-lg font-semibold text-sm bg-ember text-white"
++        >
++          Filtrer
++        </button>
++      </div>
++    </>
++  );
++
++  return (
++    <div>
++      {toast && (
++        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-lg bg-void text-paper">
++          {toast}
++        </div>
++      )}
++
++      <StoreHeader cartCount={cartCount} onCartClick={() => setCartOpen(true)} active="produits" />
++
++      <div className="px-6 py-8 md:px-14">
++        <p className="text-sm text-ash mb-1">
++          <a href="/" className="hover:text-void">Accueil</a> / <span className="text-void">Produits</span>
++        </p>
++        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
++          <h1 className="font-display text-3xl text-void">Produits</h1>
++          <div className="flex items-center gap-2">
++            <button
++              onClick={() => setMobileFiltersOpen(true)}
++              className="lg:hidden flex items-center gap-1 px-3 py-2 rounded-lg border border-paperdeep bg-white text-sm font-medium text-sack"
++            >
++              <SlidersHorizontal size={14} /> Filtres
++            </button>
++            <div className="relative">
++              <button
++                onClick={() => setSortOpen((o) => !o)}
++                className="flex items-center gap-1 px-3 py-2 rounded-lg border border-paperdeep bg-white font-medium text-sm text-sack"
++              >
++                Trier par : {SORTS.find((s) => s.id === sort)?.label} <ChevronDown size={14} />
++              </button>
++              {sortOpen && (
++                <div className="absolute right-0 mt-1 w-48 rounded-lg border border-paperdeep bg-white shadow-lg z-20 overflow-hidden">
++                  {SORTS.map((s) => (
++                    <button
++                      key={s.id}
++                      onClick={() => { setSort(s.id); setSortOpen(false); }}
++                      className={`block w-full text-left px-3 py-2 text-sm ${sort === s.id ? "bg-paperdeep font-semibold" : "hover:bg-paperdeep/60"}`}
++                    >
++                      {s.label}
++                    </button>
++                  ))}
++                </div>
++              )}
++            </div>
++          </div>
++        </div>
++
++        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
++          <aside className="hidden lg:block">{FiltersPanel}</aside>
++
++          {mobileFiltersOpen && (
++            <div className="fixed inset-0 z-50 flex lg:hidden">
++              <div className="absolute inset-0 bg-black/50" onClick={() => setMobileFiltersOpen(false)} />
++              <div className="relative w-full max-w-xs h-full bg-white p-5 overflow-y-auto">
++                <div className="flex items-center justify-between mb-4">
++                  <h3 className="font-display text-lg text-void">Filtres</h3>
++                  <button onClick={() => setMobileFiltersOpen(false)}><X size={20} /></button>
++                </div>
++                {FiltersPanel}
++              </div>
++            </div>
++          )}
++
++          <div>
++            {loading ? (
++              <p className="text-sm text-ash">Chargement du catalogue…</p>
++            ) : filtered.length === 0 ? (
++              <p className="text-sm text-ash">Aucun produit ne correspond à ces filtres.</p>
++            ) : (
++              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
++                {filtered.map((p) => {
++                  const Icon = ICONS[p.icon] || Package;
++                  const outOfStock = p.stock === 0;
++                  return (
++                    <div key={p.id} className="rounded-wuta overflow-hidden flex flex-col bg-white border border-paperdeep hover:shadow-lg transition">
++                      <a href={`/produits/${p.id}`} className="aspect-square bg-paperdeep block">
++                        {p.imageUrl ? (
++                          <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
++                        ) : (
++                          <SackIllustration category={p.category} Icon={Icon} />
++                        )}
++                      </a>
++                      <div className="p-4 flex flex-col flex-1">
++                        <a href={`/produits/${p.id}`}>
++                          <h3 className="text-sm font-semibold text-void hover:text-ember">{p.name}</h3>
++                        </a>
++                        <p className="text-xs text-ash mt-0.5">{p.category} – {p.weightKg} kg</p>
++                        <p className="font-display text-lg mt-2 text-void">{formatFCFA(p.price)}</p>
++                        <p className={`flex items-center gap-1.5 text-xs mt-1 ${outOfStock ? "text-emberdeep" : "text-leaf"}`}>
++                          <span className={`w-1.5 h-1.5 rounded-full ${outOfStock ? "bg-emberdeep" : "bg-leaf"}`} />
++                          {outOfStock ? "Rupture" : "En stock"}
++                        </p>
++                        <button
++                          disabled={outOfStock}
++                          onClick={() => addToCart(p)}
++                          className={`mt-3 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border ${
++                            outOfStock
++                              ? "border-paperdeep text-ash cursor-not-allowed"
++                              : "border-ember text-ember hover:bg-ember hover:text-white transition"
++                          }`}
++                        >
++                          <ShoppingCart size={15} /> Ajouter au panier
++                        </button>
++                      </div>
++                    </div>
++                  );
++                })}
++              </div>
++            )}
++          </div>
++        </div>
++      </div>
++
++      <StoreFooter contactPhone={contactPhone} contactCity={contactCity} />
++
++      <CartDrawer
++        open={cartOpen && !confirmedOrder}
++        cartItems={cartItems}
++        cartTotal={cartTotal}
++        onClose={() => setCartOpen(false)}
++        onQtyChange={setCartQty}
++        onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }}
++      />
++      {checkoutOpen && (
++        <CheckoutModal total={cartTotal} onClose={() => setCheckoutOpen(false)} onSubmit={placeOrder} />
++      )}
++      <OrderConfirmModal order={confirmedOrder} onClose={() => setConfirmedOrder(null)} />
++    </div>
++  );
++}
+diff --git a/components/Shop.js b/components/Shop.js
+index 7ba8893..3415cdf 100644
+--- a/components/Shop.js
++++ b/components/Shop.js
+@@ -1,131 +1,49 @@
+ "use client";
+ 
+-import { useEffect, useMemo, useState } from "react";
+-import dynamic from "next/dynamic";
++import { useEffect, useState } from "react";
+ import {
+-  ShoppingCart, Plus, Minus, X, Check, Flame, Truck, Phone, MapPin,
+-  Package, Leaf, Menu, Lock, Search, Home, Factory, ChevronDown, MessageCircle,
++  Plus, Flame, Truck, Phone, Leaf, Home, Factory, ChevronDown, Package,
+ } from "lucide-react";
+ import { Badge, StockGauge, formatFCFA, CATEGORY_COLORS } from "./ui";
+ import { SackIllustration, HeroIllustration } from "./illustrations";
+-
+-// Leaflet a besoin de `window` : on ne le charge jamais côté serveur.
+-const LocationPicker = dynamic(() => import("./LocationPicker"), { ssr: false });
++import StoreHeader from "./StoreHeader";
++import StoreFooter from "./StoreFooter";
++import { CartDrawer, CheckoutModal, OrderConfirmModal } from "./CartWidgets";
++import { useCart } from "../lib/useCart";
++import { submitOrder } from "../lib/placeOrder";
+ 
+ const ICONS = { sack: Package, flame: Flame, truck: Truck, leaf: Leaf };
+-const CATEGORIES = ["Tous", "Ménage", "Grillade", "Industriel", "Écologique"];
+ const CATEGORY_CARDS = [
+   { name: "Ménage", Icon: Home, tone: "bg-sack", desc: "Charbon pour usage quotidien" },
+   { name: "Grillade", Icon: Flame, tone: "bg-emberdeep", desc: "Idéal pour vos moments grillades" },
+   { name: "Industriel", Icon: Factory, tone: "bg-steel", desc: "Pour restaurants, boulangeries, etc." },
+   { name: "Écologique", Icon: Leaf, tone: "bg-leaf", desc: "Charbon écologique et durable" },
+ ];
+-const CART_KEY = "wuta_cart_v1";
+ 
+ export default function Shop({ contactPhone, contactCity }) {
+   const [products, setProducts] = useState([]);
+   const [loading, setLoading] = useState(true);
+-  const [cart, setCart] = useState({});
+   const [cartOpen, setCartOpen] = useState(false);
+   const [checkoutOpen, setCheckoutOpen] = useState(false);
+   const [confirmedOrder, setConfirmedOrder] = useState(null);
+-  const [categoryFilter, setCategoryFilter] = useState("Tous");
+-  const [toast, setToast] = useState(null);
+-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+-
+-  useEffect(() => {
+-    fetch("/api/products")
+-      .then((r) => r.json())
+-      .then((data) => setProducts(data))
+-      .finally(() => setLoading(false));
+-
+-    try {
+-      const saved = localStorage.getItem(CART_KEY);
+-      if (saved) setCart(JSON.parse(saved));
+-    } catch (e) {
+-      /* stockage local indisponible, on continue sans panier persistant */
+-    }
+-  }, []);
+ 
+-  useEffect(() => {
+-    try {
+-      localStorage.setItem(CART_KEY, JSON.stringify(cart));
+-    } catch (e) {}
+-  }, [cart]);
++  const { cartItems, cartCount, cartTotal, addToCart, setCartQty, clearCart, toast } = useCart(products);
+ 
+   useEffect(() => {
+-    if (!toast) return;
+-    const t = setTimeout(() => setToast(null), 2400);
+-    return () => clearTimeout(t);
+-  }, [toast]);
+-
+-  const productsById = useMemo(() => {
+-    const m = {};
+-    products.forEach((p) => (m[p.id] = p));
+-    return m;
+-  }, [products]);
+-
+-  const cartItems = useMemo(
+-    () =>
+-      Object.entries(cart)
+-        .filter(([id, qty]) => qty > 0 && productsById[id])
+-        .map(([id, qty]) => ({ ...productsById[id], qty })),
+-    [cart, productsById]
+-  );
+-  const cartCount = cartItems.reduce((s, i) => s + i.qty, 0);
+-  const cartTotal = cartItems.reduce((s, i) => s + i.qty * i.price, 0);
+-
+-  function addToCart(product) {
+-    const current = cart[product.id] || 0;
+-    const next = Math.min(product.stock, current + 1);
+-    if (next === current) {
+-      setToast(current >= product.stock ? "Stock maximum atteint" : "Rupture de stock");
+-      return;
+-    }
+-    setCart({ ...cart, [product.id]: next });
+-    setToast(`${product.name} ajouté au panier`);
+-  }
+-  function setCartQty(productId, qty) {
+-    const product = productsById[productId];
+-    const clamped = Math.max(0, Math.min(product ? product.stock : qty, qty));
+-    const next = { ...cart };
+-    if (clamped <= 0) delete next[productId];
+-    else next[productId] = clamped;
+-    setCart(next);
+-  }
+-
+-  const filteredProducts =
+-    categoryFilter === "Tous" ? products : products.filter((p) => p.category === categoryFilter);
++    fetch("/api/products").then((r) => r.json()).then(setProducts).finally(() => setLoading(false));
++  }, []);
+ 
+   async function placeOrder(customer) {
+-    const res = await fetch("/api/orders", {
+-      method: "POST",
+-      headers: { "Content-Type": "application/json" },
+-      body: JSON.stringify({
+-        customerName: customer.name,
+-        customerPhone: customer.phone,
+-        customerAddress: customer.address,
+-        note: customer.note,
+-        latitude: customer.latitude,
+-        longitude: customer.longitude,
+-        items: cartItems.map((i) => ({ productId: i.id, qty: i.qty })),
+-      }),
+-    });
+-    const data = await res.json();
+-    if (!res.ok) {
+-      throw new Error(data.error || "Impossible d'enregistrer la commande.");
+-    }
+-    try {
+-      localStorage.setItem("wuta_customer_v1", JSON.stringify({ name: customer.name, phone: customer.phone }));
+-    } catch (e) {}
+-    // Rafraîchit les stocks affichés après la commande.
++    const data = await submitOrder(cartItems, customer);
+     fetch("/api/products").then((r) => r.json()).then(setProducts);
+-    setCart({});
++    clearCart();
+     setCheckoutOpen(false);
+     setCartOpen(false);
+     setConfirmedOrder(data);
+   }
+ 
++  const featured = products.slice(0, 6);
++
+   return (
+     <div>
+       {toast && (
+@@ -134,52 +52,7 @@ export default function Shop({ contactPhone, contactCity }) {
+         </div>
+       )}
+ 
+-      {/* Header */}
+-      <header className="sticky top-0 z-40 flex items-center justify-between px-5 py-3 md:px-10 bg-white border-b border-paperdeep">
+-        <div className="flex items-center gap-2.5">
+-          <span className="w-9 h-9 rounded-full flex items-center justify-center bg-ember/10">
+-            <Flame size={19} className="text-ember" />
+-          </span>
+-          <div className="leading-tight">
+-            <div className="font-display text-lg tracking-tight text-void">WUTA</div>
+-            <div className="hidden sm:block text-[10px] uppercase tracking-wider text-ash">Charbon &amp; Livraison</div>
+-          </div>
+-        </div>
+-        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-sack">
+-          <a href="#accueil" className="text-ember">Accueil</a>
+-          <a href="#boutique" className="hover:text-void">Produits</a>
+-          <a href="#apropos" className="hover:text-void">À propos</a>
+-          <a href="#comment" className="hover:text-void">Livraison</a>
+-          <a href="#contact" className="hover:text-void">Contact</a>
+-        </nav>
+-        <div className="flex items-center gap-2">
+-          <button className="hidden sm:flex p-2 rounded-lg text-sack hover:bg-paperdeep" aria-label="Rechercher">
+-            <Search size={18} />
+-          </button>
+-          <a href="/messages" className="hidden sm:flex p-2 rounded-lg text-sack hover:bg-paperdeep" aria-label="Messagerie">
+-            <MessageCircle size={18} />
+-          </a>
+-          <button
+-            onClick={() => setCartOpen(true)}
+-            className="relative flex items-center gap-2 px-4 py-2.5 rounded-lg bg-ember text-white font-semibold text-sm shadow-sm shadow-ember/30"
+-          >
+-            <ShoppingCart size={17} />
+-            <span>Panier{cartCount > 0 ? ` (${cartCount})` : ""}</span>
+-          </button>
+-          <button className="md:hidden p-2 rounded-lg text-void" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
+-            <Menu size={20} />
+-          </button>
+-        </div>
+-      </header>
+-      {mobileNavOpen && (
+-        <div className="md:hidden flex flex-col px-5 py-3 gap-3 text-sm bg-white border-b border-paperdeep text-sack">
+-          <a href="#boutique" onClick={() => setMobileNavOpen(false)}>Produits</a>
+-          <a href="#comment" onClick={() => setMobileNavOpen(false)}>Livraison</a>
+-          <a href="/messages" onClick={() => setMobileNavOpen(false)}>Messagerie</a>
+-          <a href="#contact" onClick={() => setMobileNavOpen(false)}>Contact</a>
+-          <a href="/admin" className="flex items-center gap-1 text-void font-medium"><Lock size={14} /> Espace pro</a>
+-        </div>
+-      )}
++      <StoreHeader cartCount={cartCount} onCartClick={() => setCartOpen(true)} active="accueil" />
+ 
+       {/* Hero */}
+       <section id="accueil" className="relative overflow-hidden px-6 py-14 md:py-20 md:px-14 bg-paper">
+@@ -194,10 +67,10 @@ export default function Shop({ contactPhone, contactCity }) {
+               Bois dur, braise pour grillades et charbon industriel, payés à la réception.
+             </p>
+             <div className="mt-8 flex flex-wrap gap-3">
+-              <a href="#boutique" className="px-6 py-3 rounded-lg font-semibold text-sm bg-ember text-white shadow-sm shadow-ember/30">
++              <a href="/produits" className="px-6 py-3 rounded-lg font-semibold text-sm bg-ember text-white shadow-sm shadow-ember/30">
+                 Commander maintenant
+               </a>
+-              <a href="#boutique" className="px-6 py-3 rounded-lg font-semibold text-sm border border-voidline text-void">
++              <a href="/produits" className="px-6 py-3 rounded-lg font-semibold text-sm border border-voidline text-void">
+                 Voir les produits
+               </a>
+             </div>
+@@ -233,10 +106,10 @@ export default function Shop({ contactPhone, contactCity }) {
+         </div>
+         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+           {CATEGORY_CARDS.map(({ name, Icon, tone, desc }) => (
+-            <button
++            <a
+               key={name}
+-              onClick={() => setCategoryFilter(name)}
+-              className={`text-left rounded-wuta p-6 text-white ${tone} hover:-translate-y-1 transition`}
++              href={`/produits?categorie=${encodeURIComponent(name)}`}
++              className={`text-left rounded-wuta p-6 text-white ${tone} hover:-translate-y-1 transition block`}
+             >
+               <Icon size={22} />
+               <h3 className="font-display text-lg mt-4">{name}</h3>
+@@ -244,111 +117,69 @@ export default function Shop({ contactPhone, contactCity }) {
+               <span className="inline-block text-xs font-semibold mt-4 underline underline-offset-2">
+                 Voir les produits →
+               </span>
+-            </button>
++            </a>
+           ))}
+         </div>
+       </section>
+ 
+-      {/* Boutique */}
++      {/* Boutique (aperçu) */}
+       <section id="boutique" className="px-6 py-16 md:px-14 bg-paperdeep/40">
+         <div className="flex items-end justify-between flex-wrap gap-4 mb-8">
+           <div>
+             <span className="text-xs font-mono uppercase tracking-widest text-ash">Catalogue</span>
+             <h2 className="font-display text-3xl mt-1 text-void">Nos sacs de charbon</h2>
+           </div>
+-          <div className="flex items-center gap-2 text-sm text-sack">
+-            <span className="hidden sm:inline text-ash">Trier par :</span>
+-            <button className="flex items-center gap-1 px-3 py-2 rounded-lg border border-paperdeep bg-white font-medium">
+-              Popularité <ChevronDown size={14} />
+-            </button>
+-          </div>
++          <a href="/produits" className="flex items-center gap-1 px-4 py-2 rounded-lg border border-voidline text-sm font-semibold text-void">
++            Voir tous les produits <ChevronDown size={14} className="-rotate-90" />
++          </a>
+         </div>
+ 
+-        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
+-          {/* Sidebar filtres */}
+-          <aside className="space-y-6">
+-            <div>
+-              <h3 className="text-xs font-semibold uppercase tracking-wide text-ash mb-3">Catégories</h3>
+-              <div className="flex flex-col gap-1">
+-                {CATEGORIES.map((c) => (
+-                  <button
+-                    key={c}
+-                    onClick={() => setCategoryFilter(c)}
+-                    className={`text-left px-3 py-2 rounded-lg text-sm font-medium ${
+-                      categoryFilter === c ? "bg-void text-white" : "text-sack hover:bg-paperdeep"
+-                    }`}
+-                  >
+-                    {c === "Tous" ? "Tous les produits" : c}
+-                  </button>
+-                ))}
+-              </div>
+-            </div>
+-            <div className="pt-4 border-t border-paperdeep">
+-              <h3 className="text-xs font-semibold uppercase tracking-wide text-ash mb-3">Disponibilité</h3>
+-              <label className="flex items-center gap-2 text-sm text-sack">
+-                <input type="checkbox" defaultChecked className="accent-ember" /> En stock
+-              </label>
+-            </div>
+-          </aside>
+-
+-          {/* Grille produits */}
+-          <div>
+-            {loading ? (
+-              <p className="text-sm text-ash">Chargement du catalogue…</p>
+-            ) : filteredProducts.length === 0 ? (
+-              <p className="text-sm text-ash">Aucun produit dans cette catégorie pour le moment.</p>
+-            ) : (
+-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+-                {filteredProducts.map((p) => {
+-                  const Icon = ICONS[p.icon] || Package;
+-                  const outOfStock = p.stock === 0;
+-                  const lowStock = !outOfStock && p.stock / p.capacity < 0.2;
+-                  return (
+-                    <div key={p.id} className="rounded-wuta overflow-hidden flex flex-col bg-white border border-paperdeep hover:-translate-y-1 hover:shadow-xl transition">
+-                      <div className="aspect-[4/3] bg-paperdeep">
+-                        {p.imageUrl ? (
+-                          <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+-                        ) : (
+-                          <SackIllustration category={p.category} Icon={Icon} />
+-                        )}
+-                      </div>
+-                      <div className="p-5 flex flex-col flex-1">
+-                        <div className="flex items-center justify-between gap-2">
+-                          <Badge className={CATEGORY_COLORS[p.category]}>{p.category}</Badge>
+-                          <span className="font-mono text-xs text-ash">{p.weightKg} kg</span>
+-                        </div>
+-                        <h3 className="font-display text-lg mt-3 text-void">{p.name}</h3>
+-                        <p className="text-sm mt-2 flex-1 text-sack">{p.description}</p>
+-                        <p className="text-xs mt-3 font-mono text-ash">Braise : {p.burnTime}</p>
+-
+-                        <div className="mt-4">
+-                          <div className="flex items-center justify-between text-xs mb-1 text-ash">
+-                            <span>Stock</span>
+-                            <span>{outOfStock ? "Rupture" : lowStock ? "Stock limité" : `${p.stock} disponibles`}</span>
+-                          </div>
+-                          <StockGauge stock={p.stock} capacity={p.capacity} />
+-                        </div>
+-
+-                        <div className="mt-5 flex items-center justify-between">
+-                          <span className="font-display text-xl text-void">{formatFCFA(p.price)}</span>
+-                          <button
+-                            disabled={outOfStock}
+-                            onClick={() => addToCart(p)}
+-                            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 ${
+-                              outOfStock ? "bg-paperdeep text-ash cursor-not-allowed" : "bg-ember text-white shadow-sm shadow-ember/30"
+-                            }`}
+-                          >
+-                            <Plus size={16} /> Ajouter
+-                          </button>
+-                        </div>
+-                      </div>
++        {loading ? (
++          <p className="text-sm text-ash">Chargement du catalogue…</p>
++        ) : (
++          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
++            {featured.map((p) => {
++              const Icon = ICONS[p.icon] || Package;
++              const outOfStock = p.stock === 0;
++              return (
++                <div key={p.id} className="rounded-wuta overflow-hidden flex flex-col bg-white border border-paperdeep hover:-translate-y-1 hover:shadow-xl transition">
++                  <a href={`/produits/${p.id}`} className="aspect-[4/3] bg-paperdeep block">
++                    {p.imageUrl ? (
++                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
++                    ) : (
++                      <SackIllustration category={p.category} Icon={Icon} />
++                    )}
++                  </a>
++                  <div className="p-5 flex flex-col flex-1">
++                    <div className="flex items-center justify-between gap-2">
++                      <Badge className={CATEGORY_COLORS[p.category]}>{p.category}</Badge>
++                      <span className="font-mono text-xs text-ash">{p.weightKg} kg</span>
+                     </div>
+-                  );
+-                })}
+-              </div>
+-            )}
++                    <a href={`/produits/${p.id}`}>
++                      <h3 className="font-display text-lg mt-3 text-void hover:text-ember">{p.name}</h3>
++                    </a>
++                    <p className="text-sm mt-2 flex-1 text-sack">{p.description}</p>
++                    <div className="mt-4">
++                      <StockGauge stock={p.stock} capacity={p.capacity} />
++                    </div>
++                    <div className="mt-5 flex items-center justify-between">
++                      <span className="font-display text-xl text-void">{formatFCFA(p.price)}</span>
++                      <button
++                        disabled={outOfStock}
++                        onClick={() => addToCart(p)}
++                        className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 ${
++                          outOfStock ? "bg-paperdeep text-ash cursor-not-allowed" : "bg-ember text-white shadow-sm shadow-ember/30"
++                        }`}
++                      >
++                        <Plus size={16} /> Ajouter
++                      </button>
++                    </div>
++                  </div>
++                </div>
++              );
++            })}
+           </div>
+-        </div>
++        )}
+       </section>
+ 
+       {/* Comment commander */}
+@@ -369,177 +200,20 @@ export default function Shop({ contactPhone, contactCity }) {
+         </div>
+       </section>
+ 
+-      {/* Footer */}
+-      <footer id="contact" className="px-6 py-14 md:px-14 bg-void text-ashlight">
+-        <div className="flex flex-wrap justify-between gap-8">
+-          <div>
+-            <div className="flex items-center gap-2">
+-              <Flame size={20} className="text-ember" />
+-              <span className="font-display text-lg text-paper">WUTA Charbon</span>
+-            </div>
+-            <p className="text-sm mt-3 max-w-xs">Vente de charbon de bois, braise et éco-charbon.</p>
+-          </div>
+-          <div className="text-sm space-y-2">
+-            <p className="flex items-center gap-2"><MapPin size={16} /> {contactCity}</p>
+-            <p className="flex items-center gap-2"><Phone size={16} /> {contactPhone}</p>
+-            <a href="/messages" className="flex items-center gap-2 opacity-90 hover:opacity-100">
+-              <MessageCircle size={16} /> Messagerie / service client
+-            </a>
+-            <a href="/admin" className="flex items-center gap-2 opacity-70 hover:opacity-100">
+-              <Lock size={14} /> Espace pro
+-            </a>
+-          </div>
+-        </div>
+-      </footer>
+-
+-      {/* Panier */}
+-      {cartOpen && !confirmedOrder && (
+-        <div className="fixed inset-0 z-50 flex justify-end">
+-          <div className="absolute inset-0 bg-black/50" onClick={() => setCartOpen(false)} />
+-          <div className="relative w-full max-w-md h-full flex flex-col bg-white">
+-            <div className="flex items-center justify-between px-5 py-4 border-b border-paperdeep">
+-              <h3 className="font-display text-xl">Votre panier</h3>
+-              <button onClick={() => setCartOpen(false)}><X size={20} /></button>
+-            </div>
+-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+-              {cartItems.length === 0 && <p className="text-sm text-ash">Votre panier est vide pour l'instant.</p>}
+-              {cartItems.map((item) => (
+-                <div key={item.id} className="flex items-center gap-3 pb-4 border-b border-paperdeep">
+-                  <div className="flex-1">
+-                    <p className="text-sm font-semibold">{item.name}</p>
+-                    <p className="text-xs font-mono text-ash">{formatFCFA(item.price)}</p>
+-                  </div>
+-                  <div className="flex items-center gap-2">
+-                    <button onClick={() => setCartQty(item.id, item.qty - 1)} className="w-7 h-7 flex items-center justify-center rounded-full bg-paperdeep">
+-                      <Minus size={14} />
+-                    </button>
+-                    <span className="w-5 text-center text-sm">{item.qty}</span>
+-                    <button onClick={() => setCartQty(item.id, item.qty + 1)} className="w-7 h-7 flex items-center justify-center rounded-full bg-paperdeep">
+-                      <Plus size={14} />
+-                    </button>
+-                  </div>
+-                </div>
+-              ))}
+-            </div>
+-            {cartItems.length > 0 && (
+-              <div className="px-5 py-4 border-t border-paperdeep">
+-                <div className="flex items-center justify-between mb-4">
+-                  <span className="text-sm text-ash">Total</span>
+-                  <span className="font-display text-xl">{formatFCFA(cartTotal)}</span>
+-                </div>
+-                <button
+-                  onClick={() => { setCartOpen(false); setCheckoutOpen(true); }}
+-                  className="w-full py-3 rounded-lg font-semibold text-sm bg-void text-paper"
+-                >
+-                  Passer la commande
+-                </button>
+-              </div>
+-            )}
+-          </div>
+-        </div>
+-      )}
++      <StoreFooter contactPhone={contactPhone} contactCity={contactCity} />
+ 
++      <CartDrawer
++        open={cartOpen && !confirmedOrder}
++        cartItems={cartItems}
++        cartTotal={cartTotal}
++        onClose={() => setCartOpen(false)}
++        onQtyChange={setCartQty}
++        onCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }}
++      />
+       {checkoutOpen && (
+         <CheckoutModal total={cartTotal} onClose={() => setCheckoutOpen(false)} onSubmit={placeOrder} />
+       )}
+-
+-      {confirmedOrder && (
+-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+-          <div className="absolute inset-0 bg-black/60" />
+-          <div className="relative max-w-sm w-full rounded-2xl p-8 text-center bg-white">
+-            <div className="w-14 h-14 mx-auto rounded-full flex items-center justify-center bg-leaf/20">
+-              <Check size={28} className="text-leaf" />
+-            </div>
+-            <h3 className="font-display text-2xl mt-4">Commande reçue</h3>
+-            <p className="text-sm mt-2 text-sack">
+-              Référence <span className="font-mono">{confirmedOrder.reference}</span>. Un livreur vous contactera bientôt.
+-            </p>
+-            <p className="font-display text-xl mt-4">{formatFCFA(confirmedOrder.total)}</p>
+-            <button
+-              onClick={() => setConfirmedOrder(null)}
+-              className="mt-6 w-full py-3 rounded-lg font-semibold text-sm bg-void text-paper"
+-            >
+-              Continuer mes achats
+-            </button>
+-          </div>
+-        </div>
+-      )}
+-    </div>
+-  );
+-}
+-
+-function CheckoutModal({ total, onClose, onSubmit }) {
+-  const [name, setName] = useState("");
+-  const [phone, setPhone] = useState("");
+-  const [address, setAddress] = useState("");
+-  const [note, setNote] = useState("");
+-  const [latitude, setLatitude] = useState(null);
+-  const [longitude, setLongitude] = useState(null);
+-  const [error, setError] = useState("");
+-  const [submitting, setSubmitting] = useState(false);
+-
+-  async function submit() {
+-    if (!name.trim() || !phone.trim() || !address.trim()) {
+-      setError("Merci de renseigner votre nom, téléphone et adresse de livraison.");
+-      return;
+-    }
+-    setError("");
+-    setSubmitting(true);
+-    try {
+-      await onSubmit({ name, phone, address, note, latitude, longitude });
+-    } catch (e) {
+-      setError(e.message);
+-    } finally {
+-      setSubmitting(false);
+-    }
+-  }
+-
+-  return (
+-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+-      <div className="relative max-w-md w-full rounded-2xl p-6 bg-white max-h-[92vh] overflow-y-auto">
+-        <div className="flex items-center justify-between mb-4">
+-          <h3 className="font-display text-xl">Finaliser la commande</h3>
+-          <button onClick={onClose}><X size={20} /></button>
+-        </div>
+-        <div className="space-y-3">
+-          <Field label="Nom complet" value={name} onChange={setName} placeholder="Ex : Aïcha Moussa" />
+-          <Field label="Téléphone" value={phone} onChange={setPhone} placeholder="Ex : 90 00 00 00" />
+-          <Field label="Quartier / adresse" value={address} onChange={setAddress} placeholder="Ex : Plateau, rue NB-12" />
+-          <LocationPicker
+-            latitude={latitude}
+-            longitude={longitude}
+-            onChange={(lat, lng) => { setLatitude(lat); setLongitude(lng); }}
+-          />
+-          <Field label="Note (facultatif)" value={note} onChange={setNote} placeholder="Repère, horaire préféré…" />
+-          {error && <p className="text-xs text-emberdeep">{error}</p>}
+-        </div>
+-        <div className="flex items-center justify-between mt-5">
+-          <span className="text-sm text-ash">Total à payer à la livraison</span>
+-          <span className="font-display text-lg">{formatFCFA(total)}</span>
+-        </div>
+-        <button
+-          onClick={submit}
+-          disabled={submitting}
+-          className="w-full mt-4 py-3 rounded-lg font-semibold text-sm bg-ember text-white disabled:opacity-60"
+-        >
+-          {submitting ? "Envoi…" : "Confirmer la commande"}
+-        </button>
+-      </div>
+-    </div>
+-  );
+-}
+-
+-function Field({ label, value, onChange, placeholder }) {
+-  return (
+-    <div>
+-      <label className="text-xs font-semibold text-ash">{label}</label>
+-      <input
+-        value={value}
+-        onChange={(e) => onChange(e.target.value)}
+-        placeholder={placeholder}
+-        className="w-full mt-1 px-3 py-2 rounded-lg text-sm border border-paperdeep"
+-      />
++      <OrderConfirmModal order={confirmedOrder} onClose={() => setConfirmedOrder(null)} />
+     </div>
+   );
+ }
+diff --git a/components/StoreFooter.js b/components/StoreFooter.js
+new file mode 100644
+index 0000000..18035fd
+--- /dev/null
++++ b/components/StoreFooter.js
+@@ -0,0 +1,27 @@
++import { Flame, MapPin, Phone, MessageCircle, Lock } from "lucide-react";
++
++export default function StoreFooter({ contactPhone, contactCity }) {
++  return (
++    <footer id="contact" className="px-6 py-14 md:px-14 bg-void text-ashlight">
++      <div className="flex flex-wrap justify-between gap-8">
++        <div>
++          <div className="flex items-center gap-2">
++            <Flame size={20} className="text-ember" />
++            <span className="font-display text-lg text-paper">WUTA Charbon</span>
++          </div>
++          <p className="text-sm mt-3 max-w-xs">Vente de charbon de bois, braise et éco-charbon.</p>
++        </div>
++        <div className="text-sm space-y-2">
++          <p className="flex items-center gap-2"><MapPin size={16} /> {contactCity}</p>
++          <p className="flex items-center gap-2"><Phone size={16} /> {contactPhone}</p>
++          <a href="/messages" className="flex items-center gap-2 opacity-90 hover:opacity-100">
++            <MessageCircle size={16} /> Messagerie / service client
++          </a>
++          <a href="/admin" className="flex items-center gap-2 opacity-70 hover:opacity-100">
++            <Lock size={14} /> Espace pro
++          </a>
++        </div>
++      </div>
++    </footer>
++  );
++}
+diff --git a/components/StoreHeader.js b/components/StoreHeader.js
+new file mode 100644
+index 0000000..91fa82e
+--- /dev/null
++++ b/components/StoreHeader.js
+@@ -0,0 +1,67 @@
++"use client";
++
++import { useState } from "react";
++import {
++  ShoppingCart, Flame, Menu, Lock, Search, MessageCircle,
++} from "lucide-react";
++
++export default function StoreHeader({ cartCount, onCartClick, active = "" }) {
++  const [mobileNavOpen, setMobileNavOpen] = useState(false);
++
++  const NAV = [
++    { href: "/#accueil", label: "Accueil", key: "accueil" },
++    { href: "/produits", label: "Produits", key: "produits" },
++    { href: "/#comment", label: "Livraison", key: "livraison" },
++    { href: "/messages", label: "Messagerie", key: "messages" },
++    { href: "/#contact", label: "Contact", key: "contact" },
++  ];
++
++  return (
++    <>
++      <header className="sticky top-0 z-40 flex items-center justify-between px-5 py-3 md:px-10 bg-white border-b border-paperdeep">
++        <a href="/" className="flex items-center gap-2.5">
++          <span className="w-9 h-9 rounded-full flex items-center justify-center bg-ember/10">
++            <Flame size={19} className="text-ember" />
++          </span>
++          <div className="leading-tight">
++            <div className="font-display text-lg tracking-tight text-void">WUTA</div>
++            <div className="hidden sm:block text-[10px] uppercase tracking-wider text-ash">Charbon &amp; Livraison</div>
++          </div>
++        </a>
++        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-sack">
++          {NAV.map((n) => (
++            <a key={n.key} href={n.href} className={active === n.key ? "text-ember" : "hover:text-void"}>
++              {n.label}
++            </a>
++          ))}
++        </nav>
++        <div className="flex items-center gap-2">
++          <button className="hidden sm:flex p-2 rounded-lg text-sack hover:bg-paperdeep" aria-label="Rechercher">
++            <Search size={18} />
++          </button>
++          <a href="/messages" className="hidden sm:flex p-2 rounded-lg text-sack hover:bg-paperdeep" aria-label="Messagerie">
++            <MessageCircle size={18} />
++          </a>
++          <button
++            onClick={onCartClick}
++            className="relative flex items-center gap-2 px-4 py-2.5 rounded-lg bg-ember text-white font-semibold text-sm shadow-sm shadow-ember/30"
++          >
++            <ShoppingCart size={17} />
++            <span>Panier{cartCount > 0 ? ` (${cartCount})` : ""}</span>
++          </button>
++          <button className="md:hidden p-2 rounded-lg text-void" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
++            <Menu size={20} />
++          </button>
++        </div>
++      </header>
++      {mobileNavOpen && (
++        <div className="md:hidden flex flex-col px-5 py-3 gap-3 text-sm bg-white border-b border-paperdeep text-sack">
++          {NAV.map((n) => (
++            <a key={n.key} href={n.href} onClick={() => setMobileNavOpen(false)}>{n.label}</a>
++          ))}
++          <a href="/admin" className="flex items-center gap-1 text-void font-medium"><Lock size={14} /> Espace pro</a>
++        </div>
++      )}
++    </>
++  );
++}
+diff --git a/lib/placeOrder.js b/lib/placeOrder.js
+new file mode 100644
+index 0000000..e44b812
+--- /dev/null
++++ b/lib/placeOrder.js
+@@ -0,0 +1,23 @@
++export async function submitOrder(cartItems, customer) {
++  const res = await fetch("/api/orders", {
++    method: "POST",
++    headers: { "Content-Type": "application/json" },
++    body: JSON.stringify({
++      customerName: customer.name,
++      customerPhone: customer.phone,
++      customerAddress: customer.address,
++      note: customer.note,
++      latitude: customer.latitude,
++      longitude: customer.longitude,
++      items: cartItems.map((i) => ({ productId: i.id, qty: i.qty })),
++    }),
++  });
++  const data = await res.json();
++  if (!res.ok) {
++    throw new Error(data.error || "Impossible d'enregistrer la commande.");
++  }
++  try {
++    localStorage.setItem("wuta_customer_v1", JSON.stringify({ name: customer.name, phone: customer.phone }));
++  } catch (e) {}
++  return data;
++}
+diff --git a/lib/useCart.js b/lib/useCart.js
+new file mode 100644
+index 0000000..a7e4dee
+--- /dev/null
++++ b/lib/useCart.js
+@@ -0,0 +1,78 @@
++"use client";
++
++import { useEffect, useMemo, useState } from "react";
++
++export const CART_KEY = "wuta_cart_v1";
++
++/**
++ * Panier partagé entre les pages (accueil, /produits, fiche produit).
++ * Persisté en localStorage sous la même clé partout, donc il reste cohérent
++ * quelle que soit la page sur laquelle le client navigue.
++ */
++export function useCart(products) {
++  const [cart, setCart] = useState({});
++  const [toast, setToast] = useState(null);
++
++  useEffect(() => {
++    try {
++      const saved = localStorage.getItem(CART_KEY);
++      if (saved) setCart(JSON.parse(saved));
++    } catch (e) {
++      /* stockage local indisponible, on continue sans panier persistant */
++    }
++  }, []);
++
++  useEffect(() => {
++    try {
++      localStorage.setItem(CART_KEY, JSON.stringify(cart));
++    } catch (e) {}
++  }, [cart]);
++
++  useEffect(() => {
++    if (!toast) return;
++    const t = setTimeout(() => setToast(null), 2400);
++    return () => clearTimeout(t);
++  }, [toast]);
++
++  const productsById = useMemo(() => {
++    const m = {};
++    (products || []).forEach((p) => (m[p.id] = p));
++    return m;
++  }, [products]);
++
++  const cartItems = useMemo(
++    () =>
++      Object.entries(cart)
++        .filter(([id, qty]) => qty > 0 && productsById[id])
++        .map(([id, qty]) => ({ ...productsById[id], qty })),
++    [cart, productsById]
++  );
++  const cartCount = cartItems.reduce((s, i) => s + i.qty, 0);
++  const cartTotal = cartItems.reduce((s, i) => s + i.qty * i.price, 0);
++
++  function addToCart(product) {
++    const current = cart[product.id] || 0;
++    const next = Math.min(product.stock, current + 1);
++    if (next === current) {
++      setToast(current >= product.stock ? "Stock maximum atteint" : "Rupture de stock");
++      return;
++    }
++    setCart({ ...cart, [product.id]: next });
++    setToast(`${product.name} ajouté au panier`);
++  }
++
++  function setCartQty(productId, qty) {
++    const product = productsById[productId];
++    const clamped = Math.max(0, Math.min(product ? product.stock : qty, qty));
++    const next = { ...cart };
++    if (clamped <= 0) delete next[productId];
++    else next[productId] = clamped;
++    setCart(next);
++  }
++
++  function clearCart() {
++    setCart({});
++  }
++
++  return { cart, cartItems, cartCount, cartTotal, addToCart, setCartQty, clearCart, toast, setToast };
++}

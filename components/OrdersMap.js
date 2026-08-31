@@ -7,12 +7,12 @@ import { emberIcon } from "./mapUtils";
 import { formatFCFA } from "./ui";
 
 const STATUS_COLOR = {
-  "En attente": "#FF6B35",
-  "Livrée": "#5B7A4A",
-  "Annulée": "#8C8177",
+  "En attente": "#D97706",
+  "Livrée": "#16A34A",
+  "Annulée": "#78716C",
 };
 
-export default function OrdersMap({ orders }) {
+export default function OrdersMap({ orders, height = 480 }) {
   const located = orders.filter((o) => o.latitude != null && o.longitude != null);
 
   if (located.length === 0) {
@@ -29,14 +29,14 @@ export default function OrdersMap({ orders }) {
   const center = [located[0].latitude, located[0].longitude];
 
   return (
-    <div className="rounded-xl overflow-hidden border border-paperdeep" style={{ height: 480 }}>
+    <div className="rounded-xl overflow-hidden border border-paperdeep" style={{ height }}>
       <MapContainer center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {located.map((o) => (
-          <Marker key={o.id} position={[o.latitude, o.longitude]} icon={emberIcon(STATUS_COLOR[o.status] || "#FF6B35")}>
+          <Marker key={o.id} position={[o.latitude, o.longitude]} icon={emberIcon(STATUS_COLOR[o.status] || "#D97706")}>
             <Popup>
               <div className="text-sm">
                 <p className="font-semibold font-mono">{o.reference}</p>
