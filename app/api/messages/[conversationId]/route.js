@@ -30,12 +30,19 @@ export async function POST(request, { params }) {
   const conversation = db.prepare("SELECT * FROM conversations WHERE id = ?").get(conversationId);
   if (!conversation) return NextResponse.json({ error: "Conversation introuvable." }, { status: 404 });
 
-  const { body } = await request.json();
-  if (!body || !body.trim()) {
+  const { body, audioUrl } = await request.json();
+  const isAudio = !!audioUrl;
+  if (!isAudio && (!body || !body.trim())) {
     return NextResponse.json({ error: "Message vide." }, { status: 400 });
   }
 
-  const message = addMessage(conversationId, "admin", session.email || "Support WUTA", body.trim());
+  const message = addMessage(
+    conversationId,
+    "admin",
+    session.email || "Support WUTA",
+    isAudio ? "" : body.trim(),
+    isAudio ? { type: "audio", audioUrl } : undefined
+  );
 
   notify("client", conversationId, {
     title: "WUTA — nouvelle réponse",

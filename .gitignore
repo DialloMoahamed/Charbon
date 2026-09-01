@@ -4,5 +4,6 @@ node_modules
 .env.local
 data/*.db
 data/*.db-journal
+public/uploads/
 npm-debug.log*
 .DS_Store

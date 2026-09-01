@@ -25,14 +25,21 @@ export async function GET(request) {
 
 // POST /api/messages { phone, name, body } — le client envoie un message.
 export async function POST(request) {
-  const { phone, name, body } = await request.json();
+  const { phone, name, body, audioUrl } = await request.json();
   const id = normalizePhone(phone);
-  if (!id || !body || !body.trim()) {
+  const isAudio = !!audioUrl;
+  if (!id || (!isAudio && (!body || !body.trim()))) {
     return NextResponse.json({ error: "Numéro de téléphone et message requis." }, { status: 400 });
   }
 
   const conversation = getOrCreateConversation(phone, name);
-  const message = addMessage(conversation.id, "client", name || conversation.customerName, body.trim());
+  const message = addMessage(
+    conversation.id,
+    "client",
+    name || conversation.customerName,
+    isAudio ? "" : body.trim(),
+    isAudio ? { type: "audio", audioUrl } : undefined
+  );
 
   notifyAll("admin", {
     title: `Nouveau message — ${name || conversation.customerName || conversation.customerPhone}`,

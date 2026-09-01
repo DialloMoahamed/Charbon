@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send, Bell, User } from "lucide-react";
 import { pushSupported, enablePushNotifications } from "../lib/pushClient";
+import { voiceRecordingSupported, useVoiceRecorder, RecordingBar, MicButton, VoiceMessageBubble } from "./VoiceMessage";
 
 const POLL_LIST_MS = 6000;
 const POLL_THREAD_MS = 4000;
@@ -14,6 +15,10 @@ function timeAgo(iso) {
   const diffH = Math.round(diffMin / 60);
   if (diffH < 24) return `il y a ${diffH} h`;
   return `il y a ${Math.round(diffH / 24)} j`;
+}
+
+function timeLabel(iso) {
+  return new Date(iso + "Z").toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function MessagingPanel({ initialConversationId, onConsumeInitial }) {
@@ -92,6 +97,34 @@ export default function MessagingPanel({ initialConversationId, onConsumeInitial
     }
   }
 
+  async function sendVoice(blob) {
+    if (!activeId) return;
+    setSending(true);
+    try {
+      const uploadRes = await fetch("/api/uploads/voice", {
+        method: "POST",
+        headers: { "Content-Type": blob.type || "audio/webm" },
+        body: blob,
+      });
+      const upload = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(upload.error || "Échec de l'envoi du vocal.");
+
+      const res = await fetch(`/api/messages/${activeId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioUrl: upload.url }),
+      });
+      const data = await res.json();
+      if (res.ok) setMessages((prev) => [...prev, data.message]);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const recorder = useVoiceRecorder(sendVoice);
+
   async function handleEnableNotifications() {
     const ok = await enablePushNotifications({ scope: "admin" });
     setNotifState(ok ? "granted" : (typeof Notification !== "undefined" ? Notification.permission : "denied"));
@@ -152,14 +185,14 @@ export default function MessagingPanel({ initialConversationId, onConsumeInitial
         </div>
 
         {/* Fil de conversation */}
-        <div className="flex flex-col min-w-0">
+        <div className="flex flex-col min-w-0 bg-[#e7ded3]">
           {!active ? (
-            <div className="flex-1 flex items-center justify-center text-sm text-ash">
+            <div className="flex-1 flex items-center justify-center text-sm text-ash bg-white">
               Sélectionnez une conversation.
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-paperdeep">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-paperdeep bg-white">
                 <span className="w-8 h-8 rounded-full flex items-center justify-center bg-paperdeep text-sack">
                   <User size={15} />
                 </span>
@@ -168,38 +201,58 @@ export default function MessagingPanel({ initialConversationId, onConsumeInitial
                   <p className="text-xs text-ash">{active.customerPhone}</p>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-                {messages.map((m) => (
-                  <div key={m.id} className={`flex ${m.sender === "admin" ? "justify-end" : "justify-start"}`}>
-                    <div
-                      className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm ${
-                        m.sender === "admin"
-                          ? "bg-ember text-white rounded-br-sm"
-                          : "bg-paperdeep text-void rounded-bl-sm"
-                      }`}
-                    >
-                      {m.body}
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+                {messages.map((m) => {
+                  const mine = m.sender === "admin";
+                  return (
+                    <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[75%] px-3 py-2 shadow-sm ${
+                          mine
+                            ? "bg-ember text-white rounded-2xl rounded-br-md"
+                            : "bg-white text-void rounded-2xl rounded-bl-md"
+                        }`}
+                      >
+                        {m.type === "audio" && m.audioUrl ? (
+                          <VoiceMessageBubble url={m.audioUrl} mine={mine} />
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap break-words">{m.body}</p>
+                        )}
+                        <p className={`text-[10px] text-right mt-1 ${mine ? "text-white/70" : "text-ash"}`}>
+                          {timeLabel(m.createdAt)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={bottomRef} />
               </div>
-              <div className="flex items-center gap-2 px-4 py-3 border-t border-paperdeep">
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && send()}
-                  placeholder="Répondre…"
-                  className="flex-1 px-3 py-2 rounded-lg text-sm border border-paperdeep"
-                />
-                <button
-                  onClick={send}
-                  disabled={sending || !draft.trim()}
-                  className="p-2 rounded-lg bg-ember text-white disabled:opacity-50"
-                  aria-label="Envoyer"
-                >
-                  <Send size={16} />
-                </button>
+              <div className="flex items-center gap-2 px-4 py-3 border-t border-paperdeep bg-white">
+                {recorder.recording ? (
+                  <RecordingBar seconds={recorder.seconds} onCancel={recorder.cancel} onSend={recorder.stop} />
+                ) : (
+                  <>
+                    <input
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && send()}
+                      placeholder="Répondre…"
+                      className="flex-1 px-3 py-2 rounded-lg text-sm border border-paperdeep"
+                    />
+                    {draft.trim() ? (
+                      <button
+                        onClick={send}
+                        disabled={sending}
+                        className="p-2 rounded-lg bg-ember text-white disabled:opacity-50"
+                        aria-label="Envoyer"
+                      >
+                        <Send size={16} />
+                      </button>
+                    ) : voiceRecordingSupported ? (
+                      <MicButton onClick={recorder.start} className="p-2 rounded-lg bg-ember text-white" />
+                    ) : null}
+                  </>
+                )}
               </div>
             </>
           )}

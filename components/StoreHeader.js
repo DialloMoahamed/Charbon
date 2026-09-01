@@ -11,7 +11,7 @@ export default function StoreHeader({ cartCount, onCartClick, active = "" }) {
   const NAV = [
     { href: "/#accueil", label: "Accueil", key: "accueil" },
     { href: "/produits", label: "Produits", key: "produits" },
-    { href: "/#comment", label: "Livraison", key: "livraison" },
+    { href: "/livraison", label: "Livraison", key: "livraison" },
     { href: "/messages", label: "Messagerie", key: "messages" },
     { href: "/#contact", label: "Contact", key: "contact" },
   ];
